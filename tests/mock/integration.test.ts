@@ -6,7 +6,7 @@
  */
 
 import http from 'http';
-import { createMockServer } from './mock-server';
+import { createMockServer, MockServerInstance } from './mock-server';
 import { Session } from '../../src/core/session';
 import { clearObjectCache } from '../../src/core/model';
 
@@ -14,23 +14,24 @@ const TEST_PORT = 3199;
 const TEST_API_KEY = 'secret_key_test1234567890';
 const TEST_API_URL = `http://localhost:${TEST_PORT}`;
 
-let server: http.Server;
+let mock: MockServerInstance;
 let session: Session;
 
 beforeAll((done) => {
-  server = createMockServer(TEST_PORT);
-  server.listen(TEST_PORT, () => {
+  mock = createMockServer(TEST_PORT);
+  mock.server.listen(TEST_PORT, () => {
     session = new Session(TEST_API_KEY, { apiUrl: TEST_API_URL });
     done();
   });
 });
 
 afterAll((done) => {
-  server.close(done);
+  mock.server.close(done);
 });
 
 beforeEach(() => {
   clearObjectCache();
+  mock.reset();
 });
 
 describe('Integration: Spec01 - Core Objects', () => {
@@ -49,6 +50,7 @@ describe('Integration: Spec01 - Core Objects', () => {
 
     it('should get a customer by ID', async () => {
       const created = await session.Customer.create({ name: 'Get Test' });
+      clearObjectCache(); // Force API fetch
       const fetched = await session.Customer.get(created.id);
       expect(fetched.name).toBe('Get Test');
     });
@@ -62,7 +64,7 @@ describe('Integration: Spec01 - Core Objects', () => {
     it('should delete a customer', async () => {
       const customer = await session.Customer.create({ name: 'To Delete' });
       await customer.delete();
-      // Verify it's gone - should throw 404
+      clearObjectCache();
       await expect(session.Customer.get(customer.id)).rejects.toThrow();
     });
 
@@ -70,7 +72,7 @@ describe('Integration: Spec01 - Core Objects', () => {
       await session.Customer.create({ name: 'List Test 1' });
       await session.Customer.create({ name: 'List Test 2' });
       const all = await session.Customer.all();
-      expect(all.length).toBeGreaterThanOrEqual(2);
+      expect(all.length).toBe(2);
     });
   });
 

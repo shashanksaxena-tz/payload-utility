@@ -86,10 +86,10 @@ export function sanitizeId(id: string): string {
 
 /**
  * Validate an API key format.
- * Payload API keys follow the pattern: secret_key_<alphanumeric> or client_key_<alphanumeric>
+ * Payload API keys follow the pattern: secret_key_<id>, client_key_<id>, or test_secret_key_<id>
  */
 export function validateApiKey(key: string): boolean {
-  return /^(secret_key|client_key)_[a-zA-Z0-9]{10,}$/.test(key);
+  return /^(test_secret_key|secret_key|client_key)_[a-zA-Z0-9]{10,}$/.test(key);
 }
 
 /**
