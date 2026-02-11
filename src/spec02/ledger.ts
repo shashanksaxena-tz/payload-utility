@@ -7,6 +7,10 @@ import { Model, ModelSpec } from '../core/model';
  * forming the basis of the two-way (double-entry) ledger system.
  * Each transaction generates complementary ledger entries to
  * maintain balanced books.
+ *
+ * The `metadata` field allows attaching arbitrary structured data
+ * (project IDs, cost centers, tags, external references) for
+ * customization and reporting without altering the core schema.
  */
 export class Ledger extends Model {
   static spec: ModelSpec = {
@@ -22,6 +26,11 @@ export class Ledger extends Model {
   get balanceAfter(): number { return this.getFloat('balance_after'); }
   get description(): string { return this.getStr('description'); }
   get reference(): string { return this.getStr('reference'); }
+  get metadata(): Record<string, unknown> | null {
+    const val = this.get('metadata');
+    if (val && typeof val === 'object') return val as Record<string, unknown>;
+    return null;
+  }
   get createdAt(): string { return this.getStr('created_at'); }
 
   /** Check if this is a debit entry */

@@ -251,9 +251,9 @@ beforeAll(async () => {
   });
   app.post('/api/ledger/reversal', async (req: any, res: any) => {
     try {
-      const { originalDebitAccountId, originalCreditAccountId, amount, reason } = req.body;
+      const { originalDebitAccountId, originalCreditAccountId, amount, reason, metadata } = req.body;
       const result = await sdk.ledger.createReversalEntry(
-        originalDebitAccountId, originalCreditAccountId, amount, reason
+        originalDebitAccountId, originalCreditAccountId, amount, reason, metadata
       );
       res.status(201).json({ debit: modelData(result.debit), credit: modelData(result.credit) });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
@@ -829,6 +829,44 @@ describe('Dashboard API Integration Tests', () => {
       const { status, data } = await GET('/api/ledger-entries');
       expect(status).toBe(200);
       expect(data.length).toBe(2); // one debit + one credit
+    });
+
+    test('balanced entry with metadata stores and returns metadata', async () => {
+      const meta = { project: 'alpha', cost_center: 'eng', ticket: 'PROJ-123' };
+      const { status, data } = await POST('/api/ledger/balanced-entry', {
+        debit:  { accountId: 'acct_m1', amount: 100, entryType: 'debit', description: 'Meta test', metadata: meta },
+        credit: { accountId: 'acct_m2', amount: 100, entryType: 'credit', description: 'Meta test', metadata: meta },
+      });
+      expect(status).toBe(201);
+      expect(data.debit.metadata).toEqual(meta);
+      expect(data.credit.metadata).toEqual(meta);
+    });
+
+    test('multi-leg entry with metadata stores and returns metadata', async () => {
+      const meta = { batch: 'payout-42' };
+      const { status, data } = await POST('/api/ledger/multi-leg-entry', {
+        entries: [
+          { accountId: 'acct_p', amount: 100, entryType: 'debit', description: 'D', metadata: meta },
+          { accountId: 'acct_q', amount: 60, entryType: 'credit', description: 'C1', metadata: meta },
+          { accountId: 'acct_r', amount: 40, entryType: 'credit', description: 'C2', metadata: meta },
+        ],
+      });
+      expect(status).toBe(201);
+      data.forEach((entry: any) => expect(entry.metadata).toEqual(meta));
+    });
+
+    test('reversal with metadata stores metadata', async () => {
+      const meta = { refund_ticket: 'REF-999' };
+      const { status, data } = await POST('/api/ledger/reversal', {
+        originalDebitAccountId: 'acct_x',
+        originalCreditAccountId: 'acct_y',
+        amount: 75,
+        reason: 'Overcharge',
+        metadata: meta,
+      });
+      expect(status).toBe(201);
+      expect(data.debit.metadata).toEqual(meta);
+      expect(data.credit.metadata).toEqual(meta);
     });
   });
 

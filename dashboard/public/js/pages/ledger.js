@@ -1,6 +1,31 @@
 import { api } from '../api.js';
 import { toast, dataTable, buildForm, readForm, openModal, closeModal, kvDetail, money, badge } from '../components.js';
 
+function renderMetadata(val) {
+  if (!val || (typeof val === 'object' && Object.keys(val).length === 0)) return '-';
+  if (typeof val === 'string') {
+    try { val = JSON.parse(val); } catch { return val; }
+  }
+  return Object.entries(val).map(([k, v]) =>
+    `<span class="badge badge-neutral" style="margin-right:4px">${k}: ${v}</span>`
+  ).join('');
+}
+
+function parseMetadataField(id) {
+  const raw = (document.getElementById(id)?.value || '').trim();
+  if (!raw) return undefined;
+  try { return JSON.parse(raw); }
+  catch {
+    // Try key=value,key=value format
+    const obj = {};
+    raw.split(',').forEach(pair => {
+      const [k, ...v] = pair.split('=');
+      if (k && v.length) obj[k.trim()] = v.join('=').trim();
+    });
+    return Object.keys(obj).length ? obj : undefined;
+  }
+}
+
 export async function ledgerPage(el) {
   let activeTab = 'entries';
 
@@ -43,6 +68,7 @@ export async function ledgerPage(el) {
             { key: 'amount', label: 'Amount', render: v => money(v) },
             { key: 'description', label: 'Description' },
             { key: 'reference', label: 'Reference' },
+            { key: 'metadata', label: 'Metadata', render: v => renderMetadata(v) },
             { key: 'created_at', label: 'Created' },
           ],
           items,
@@ -154,6 +180,7 @@ export async function ledgerPage(el) {
                   [
                     { key: 'amount', label: 'Amount', render: v => money(v) },
                     { key: 'description', label: 'Description' },
+                    { key: 'metadata', label: 'Metadata', render: v => renderMetadata(v) },
                     { key: 'createdAt', label: 'Date' },
                   ], a.debits
                 ) : '<p style="color:var(--c-text-secondary)">None</p>'}
@@ -164,6 +191,7 @@ export async function ledgerPage(el) {
                   [
                     { key: 'amount', label: 'Amount', render: v => money(v) },
                     { key: 'description', label: 'Description' },
+                    { key: 'metadata', label: 'Metadata', render: v => renderMetadata(v) },
                     { key: 'createdAt', label: 'Date' },
                   ], a.credits
                 ) : '<p style="color:var(--c-text-secondary)">None</p>'}
@@ -207,6 +235,7 @@ export async function ledgerPage(el) {
               { key: 'entry_type', label: 'Type' },
               { key: 'amount', label: 'Amount', render: v => money(v) },
               { key: 'description', label: 'Description' },
+              { key: 'metadata', label: 'Metadata', render: v => renderMetadata(v) },
             ], entries
           );
         } catch (e) { toast(e.error || e.message, 'error'); }
@@ -242,15 +271,23 @@ export async function ledgerPage(el) {
       { name: 'amount', label: 'Amount', type: 'number', required: true },
       { name: 'debit_desc', label: 'Debit Description' },
       { name: 'credit_desc', label: 'Credit Description' },
+      { name: 'debit_ref', label: 'Debit Reference', placeholder: 'order_1234' },
+      { name: 'credit_ref', label: 'Credit Reference', placeholder: 'inv_5678' },
     ];
     openModal('New Balanced Entry', buildForm(fields) +
+      `<div class="form-group full" style="margin-top:12px">
+        <label for="f-balanced-meta" style="font-size:12px;font-weight:600;color:var(--c-text-secondary);text-transform:uppercase;letter-spacing:.3px">METADATA (optional)</label>
+        <input type="text" id="f-balanced-meta" placeholder='{"project":"alpha","cost_center":"eng"} or key=val,key=val'>
+        <p style="font-size:11px;color:var(--c-text-secondary);margin-top:2px">JSON object or key=value pairs. Applied to both entries.</p>
+      </div>` +
       `<div class="form-actions"><button class="btn btn-primary" id="btn-save">Create Entry Pair</button></div>`);
     document.getElementById('btn-save').onclick = async () => {
       const d = readForm(fields);
+      const meta = parseMetadataField('f-balanced-meta');
       try {
         await api.ledger.balancedEntry({
-          debit:  { accountId: d.debit_account,  amount: d.amount, entryType: 'debit',  description: d.debit_desc  || '' },
-          credit: { accountId: d.credit_account, amount: d.amount, entryType: 'credit', description: d.credit_desc || '' },
+          debit:  { accountId: d.debit_account,  amount: d.amount, entryType: 'debit',  description: d.debit_desc  || '', reference: d.debit_ref || '', ...(meta ? { metadata: meta } : {}) },
+          credit: { accountId: d.credit_account, amount: d.amount, entryType: 'credit', description: d.credit_desc || '', reference: d.credit_ref || '', ...(meta ? { metadata: meta } : {}) },
         });
         toast('Balanced entry created', 'success');
         closeModal(); activeTab = 'entries'; render(); await loadContent();
@@ -264,6 +301,10 @@ export async function ledgerPage(el) {
       <p style="margin-bottom:12px;color:var(--c-text-secondary)">Add 2+ entries. Total debits must equal total credits.</p>
       <div id="leg-list"></div>
       <button class="btn btn-outline btn-sm" id="btn-add-leg" style="margin:12px 0">+ Add Leg</button>
+      <div class="form-group full" style="margin-top:8px">
+        <label style="font-size:12px;font-weight:600;color:var(--c-text-secondary);text-transform:uppercase;letter-spacing:.3px">METADATA (optional, applied to all legs)</label>
+        <input type="text" id="ml-metadata" placeholder='{"project":"beta"} or key=val,key=val'>
+      </div>
       <div class="form-actions"><button class="btn btn-primary" id="btn-save-ml">Create Entries</button></div>
     `);
     let legCount = 0;
@@ -284,13 +325,14 @@ export async function ledgerPage(el) {
     addLeg(); addLeg(); // start with 2
     document.getElementById('btn-add-leg').onclick = addLeg;
     document.getElementById('btn-save-ml').onclick = async () => {
+      const meta = parseMetadataField('ml-metadata');
       const entries = [];
       for (let i = 1; i <= legCount; i++) {
         const acct = document.getElementById(`leg-acct-${i}`).value.trim();
         const amt = Number(document.getElementById(`leg-amt-${i}`).value);
         const type = document.getElementById(`leg-type-${i}`).value;
         const desc = document.getElementById(`leg-desc-${i}`).value;
-        if (acct && amt) entries.push({ accountId: acct, amount: amt, entryType: type, description: desc });
+        if (acct && amt) entries.push({ accountId: acct, amount: amt, entryType: type, description: desc, ...(meta ? { metadata: meta } : {}) });
       }
       try {
         await api.ledger.multiLegEntry(entries);
@@ -309,10 +351,16 @@ export async function ledgerPage(el) {
       { name: 'reason', label: 'Reason', required: true },
     ];
     openModal('Create Reversal', buildForm(fields) +
+      `<div class="form-group full" style="margin-top:12px">
+        <label for="f-rev-meta" style="font-size:12px;font-weight:600;color:var(--c-text-secondary);text-transform:uppercase;letter-spacing:.3px">METADATA (optional)</label>
+        <input type="text" id="f-rev-meta" placeholder='{"ticket":"SUP-4321"} or key=val,key=val'>
+      </div>` +
       `<div class="form-actions"><button class="btn btn-primary" id="btn-save">Create Reversal</button></div>`);
     document.getElementById('btn-save').onclick = async () => {
+      const d = readForm(fields);
+      const meta = parseMetadataField('f-rev-meta');
       try {
-        await api.ledger.reversal(readForm(fields));
+        await api.ledger.reversal({ ...d, ...(meta ? { metadata: meta } : {}) });
         toast('Reversal created', 'success');
         closeModal(); activeTab = 'entries'; render(); await loadContent();
       } catch (e) { toast(e.error || e.message, 'error'); }

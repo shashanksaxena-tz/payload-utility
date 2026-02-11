@@ -181,5 +181,58 @@ describe('LedgerManager', () => {
       // Reversal: original debit account gets credited
       expect(result.credit.getStr('account_id')).toBe('acct_1');
     });
+
+    it('should pass metadata through on reversals', async () => {
+      const meta = { ticket: 'SUP-1234', reason_code: 'customer_request' };
+      const result = await manager.createReversalEntry('acct_1', 'acct_2', 50, 'Refund', meta);
+
+      expect(result.debit.metadata).toEqual(meta);
+      expect(result.credit.metadata).toEqual(meta);
+    });
+  });
+
+  describe('metadata support', () => {
+    it('should store metadata on balanced entries', async () => {
+      const meta = { project: 'alpha', cost_center: 'eng' };
+      const result = await manager.createBalancedEntry({
+        debit: { accountId: 'acct_1', amount: 200, entryType: 'debit', description: 'D', metadata: meta },
+        credit: { accountId: 'acct_2', amount: 200, entryType: 'credit', description: 'C', metadata: meta },
+      });
+
+      expect(result.debit.metadata).toEqual(meta);
+      expect(result.credit.metadata).toEqual(meta);
+    });
+
+    it('should store metadata on multi-leg entries', async () => {
+      const meta = { batch: 'weekly-payout-42' };
+      const entries = await manager.createMultiLegEntry([
+        { accountId: 'acct_1', amount: 100, entryType: 'debit', description: 'D', metadata: meta },
+        { accountId: 'acct_2', amount: 60, entryType: 'credit', description: 'C1', metadata: meta },
+        { accountId: 'acct_3', amount: 40, entryType: 'credit', description: 'C2', metadata: meta },
+      ]);
+
+      entries.forEach(e => expect(e.metadata).toEqual(meta));
+    });
+
+    it('should allow entries without metadata (backward compatible)', async () => {
+      const result = await manager.createBalancedEntry({
+        debit: { accountId: 'acct_1', amount: 50, entryType: 'debit', description: 'D' },
+        credit: { accountId: 'acct_2', amount: 50, entryType: 'credit', description: 'C' },
+      });
+
+      expect(result.debit.metadata).toBeNull();
+      expect(result.credit.metadata).toBeNull();
+    });
+
+    it('should include metadata in activity summary', async () => {
+      const meta = { department: 'sales' };
+      await manager.createBalancedEntry({
+        debit: { accountId: 'acct_1', amount: 75, entryType: 'debit', description: 'Sale', metadata: meta },
+        credit: { accountId: 'acct_2', amount: 75, entryType: 'credit', description: 'Receivable', metadata: meta },
+      });
+
+      const activity = await manager.getActivitySummary('acct_1');
+      expect(activity.debits[0].metadata).toEqual(meta);
+    });
   });
 });

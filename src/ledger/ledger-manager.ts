@@ -30,6 +30,7 @@ export interface LedgerEntry {
   entryType: 'debit' | 'credit';
   description: string;
   reference?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface LedgerPair {
@@ -100,6 +101,7 @@ export class LedgerManager {
         entry_type: 'debit',
         description: pair.debit.description,
         reference: pair.debit.reference || '',
+        ...(pair.debit.metadata ? { metadata: pair.debit.metadata } : {}),
       }),
       this.session.Ledger.create({
         account_id: pair.credit.accountId,
@@ -107,6 +109,7 @@ export class LedgerManager {
         entry_type: 'credit',
         description: pair.credit.description,
         reference: pair.credit.reference || '',
+        ...(pair.credit.metadata ? { metadata: pair.credit.metadata } : {}),
       }),
     ]);
 
@@ -144,6 +147,7 @@ export class LedgerManager {
           entry_type: entry.entryType,
           description: entry.description,
           reference: entry.reference || '',
+          ...(entry.metadata ? { metadata: entry.metadata } : {}),
         })
       )
     );
@@ -263,7 +267,8 @@ export class LedgerManager {
     originalDebitAccountId: string,
     originalCreditAccountId: string,
     amount: number,
-    reason: string
+    reason: string,
+    metadata?: Record<string, unknown>
   ): Promise<{ debit: Ledger; credit: Ledger }> {
     // Reverse: the original debit account gets a credit, and vice versa
     return this.createBalancedEntry({
@@ -273,6 +278,7 @@ export class LedgerManager {
         entryType: 'debit',
         description: `REVERSAL: ${reason}`,
         reference: `reversal`,
+        ...(metadata ? { metadata } : {}),
       },
       credit: {
         accountId: originalDebitAccountId,
@@ -280,6 +286,7 @@ export class LedgerManager {
         entryType: 'credit',
         description: `REVERSAL: ${reason}`,
         reference: `reversal`,
+        ...(metadata ? { metadata } : {}),
       },
     });
   }
@@ -293,8 +300,8 @@ export class LedgerManager {
     endDate?: string
   ): Promise<{
     accountId: string;
-    debits: Array<{ amount: number; description: string; createdAt: string }>;
-    credits: Array<{ amount: number; description: string; createdAt: string }>;
+    debits: Array<{ amount: number; description: string; createdAt: string; reference?: string; metadata?: Record<string, unknown> | null }>;
+    credits: Array<{ amount: number; description: string; createdAt: string; reference?: string; metadata?: Record<string, unknown> | null }>;
     totalDebits: number;
     totalCredits: number;
     netChange: number;
@@ -310,8 +317,8 @@ export class LedgerManager {
 
     const entries = await this.session.Ledger.filterBy(...filters).all();
 
-    const debits: Array<{ amount: number; description: string; createdAt: string }> = [];
-    const credits: Array<{ amount: number; description: string; createdAt: string }> = [];
+    const debits: Array<{ amount: number; description: string; createdAt: string; reference?: string; metadata?: Record<string, unknown> | null }> = [];
+    const credits: Array<{ amount: number; description: string; createdAt: string; reference?: string; metadata?: Record<string, unknown> | null }> = [];
     let totalDebits = 0;
     let totalCredits = 0;
 
@@ -320,6 +327,8 @@ export class LedgerManager {
         amount: entry.amount,
         description: entry.description,
         createdAt: entry.createdAt,
+        reference: entry.reference,
+        metadata: entry.metadata,
       };
 
       if (entry.entryType === 'debit') {

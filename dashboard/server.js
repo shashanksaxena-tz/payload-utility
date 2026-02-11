@@ -292,9 +292,9 @@ app.post('/api/ledger/reconcile', requireSdk, async (req, res) => {
 
 app.post('/api/ledger/reversal', requireSdk, async (req, res) => {
   try {
-    const { originalDebitAccountId, originalCreditAccountId, amount, reason } = req.body;
+    const { originalDebitAccountId, originalCreditAccountId, amount, reason, metadata } = req.body;
     const result = await sdk.ledger.createReversalEntry(
-      originalDebitAccountId, originalCreditAccountId, amount, reason
+      originalDebitAccountId, originalCreditAccountId, amount, reason, metadata
     );
     res.status(201).json({ debit: modelData(result.debit), credit: modelData(result.credit) });
   } catch (e) {
