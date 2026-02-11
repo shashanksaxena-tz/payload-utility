@@ -1,0 +1,36 @@
+{
+  "name": "payload-utility",
+  "version": "1.0.0",
+  "description": "Payload Payment Gateway Utility - ARM-based SDK implementation with Spec01 and Spec02 support",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest --coverage",
+    "test:unit": "jest --testPathPattern=tests/unit",
+    "test:mock": "jest --testPathPattern=tests/mock",
+    "lint": "eslint src/ tests/ --ext .ts",
+    "start:mock-server": "ts-node tests/mock/mock-server.ts"
+  },
+  "keywords": [
+    "payload",
+    "payment-gateway",
+    "arm",
+    "api-relational-model",
+    "payments",
+    "billing",
+    "invoicing"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.11.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
