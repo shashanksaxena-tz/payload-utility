@@ -366,6 +366,38 @@ tr:hover td { background: #f8fafc; }
 .ledger-panel > .card { margin-bottom: 0; }
 
 /* ================================================================== */
+/*  Filter bar                                                         */
+/* ================================================================== */
+.filter-bar {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--c-bg);
+  border-radius: 6px;
+}
+.filter-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.filter-row select, .filter-row input {
+  padding: 6px 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+}
+.filter-row input { flex: 1; min-width: 120px; }
+.filter-row select { min-width: 110px; }
+
+/* ================================================================== */
+/*  Pagination                                                         */
+/* ================================================================== */
+.pagination-bar {
+  display: flex; align-items: center; justify-content: center; gap: 16px;
+  margin-top: 16px; padding-top: 12px;
+  border-top: 1px solid var(--c-border);
+}
+.pg-info { font-size: 12px; color: var(--c-text-secondary); }
+
+/* ================================================================== */
 /*  Empty state                                                        */
 /* ================================================================== */
 .empty-state {

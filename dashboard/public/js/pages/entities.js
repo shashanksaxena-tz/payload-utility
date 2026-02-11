@@ -60,6 +60,7 @@ export async function entitiesPage(el) {
             <button class="btn btn-primary" id="btn-new-entity">+ Entity</button>
             <button class="btn btn-outline" id="btn-new-stakeholder">+ Stakeholder</button>
             <button class="btn btn-outline" id="btn-new-proc">+ Processing Acct</button>
+            <button class="btn btn-outline" id="btn-new-agreement">+ Agreement</button>
             <button class="btn btn-outline" id="btn-new-profile">+ Profile</button>
           </div>
         </div>
@@ -202,6 +203,17 @@ export async function entitiesPage(el) {
       try {
         await api.create('processing-accounts', readForm(PROC_ACCT_FIELDS));
         toast('Processing account created', 'success');
+        closeModal(); activeTab = 'processing'; render(); await loadTab();
+      } catch (e) { toast(e.error || e.message, 'error'); }
+    };
+  };
+  document.getElementById('btn-new-agreement').onclick = () => {
+    openModal('New Processing Agreement', buildForm(AGREEMENT_FIELDS) +
+      `<div class="form-actions"><button class="btn btn-primary" id="btn-save">Create</button></div>`);
+    document.getElementById('btn-save').onclick = async () => {
+      try {
+        await api.create('processing-agreements', readForm(AGREEMENT_FIELDS));
+        toast('Agreement created', 'success');
         closeModal(); activeTab = 'processing'; render(); await loadTab();
       } catch (e) { toast(e.error || e.message, 'error'); }
     };

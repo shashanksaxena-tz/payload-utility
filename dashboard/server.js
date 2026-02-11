@@ -165,8 +165,9 @@ Object.entries(MODEL_MAP).forEach(([resource, modelName]) => {
   // UPDATE  PUT /api/{resource}/:id
   router.put('/:id', async (req, res) => {
     try {
-      const item = await sdk.session[modelName].update(req.params.id, req.body);
-      res.json(modelData(item));
+      const instance = await sdk.session[modelName].get(req.params.id);
+      await instance.update(req.body);
+      res.json(modelData(instance));
     } catch (e) {
       res.status(e.statusCode || 500).json({ error: e.message, details: e.details });
     }
@@ -175,7 +176,8 @@ Object.entries(MODEL_MAP).forEach(([resource, modelName]) => {
   // DELETE  DELETE /api/{resource}/:id
   router.delete('/:id', async (req, res) => {
     try {
-      await sdk.session[modelName].delete(req.params.id);
+      const instance = await sdk.session[modelName].get(req.params.id);
+      await instance.delete();
       res.json({ ok: true });
     } catch (e) {
       res.status(e.statusCode || 500).json({ error: e.message, details: e.details });

@@ -17,6 +17,8 @@ import { paymentLinksPage }   from './pages/payment-links.js';
 import { transfersPage }      from './pages/transfers.js';
 import { ledgerPage }         from './pages/ledger.js';
 import { settingsPage }       from './pages/settings.js';
+import { intentsPage }        from './pages/intents.js';
+import { accountsPage }       from './pages/accounts.js';
 
 /* ---- Page registry ---- */
 const PAGES = {
@@ -29,7 +31,9 @@ const PAGES = {
   entities:         { title: 'Entities',          icon: '&#9959;',  page: entitiesPage },
   webhooks:         { title: 'Webhooks',          icon: '&#128279;',page: webhooksPage },
   'payment-links':  { title: 'Payment Links',     icon: '&#128279;',page: paymentLinksPage },
+  intents:          { title: 'Intents',           icon: '&#128176;',page: intentsPage },
   transfers:        { title: 'Transfers',         icon: '&#8644;',  page: transfersPage },
+  accounts:         { title: 'Accounts',          icon: '&#9733;',  page: accountsPage },
   ledger:           { title: 'Ledger',            icon: '&#128218;',page: ledgerPage },
   settings:         { title: 'Settings',          icon: '&#9881;',  page: settingsPage },
 };

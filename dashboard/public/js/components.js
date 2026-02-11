@@ -30,8 +30,8 @@ export function badge(status) {
   const map = {
     active: 'success', processed: 'success', paid: 'success', completed: 'success',
     enabled: 'success', sent: 'info', pending: 'warning', paused: 'warning',
-    declined: 'danger', void: 'danger', cancelled: 'danger', disabled: 'danger',
-    failed: 'danger',
+    declined: 'danger', void: 'danger', voided: 'danger', cancelled: 'danger',
+    disabled: 'danger', failed: 'danger', charge: 'info', payment: 'success',
   };
   const cls = map[(status || '').toLowerCase()] || 'neutral';
   return `<span class="badge badge-${cls}">${status || 'unknown'}</span>`;
@@ -133,4 +133,62 @@ export function shortId(id) {
   if (!id) return '-';
   if (id.length <= 16) return id;
   return id.slice(0, 12) + '...';
+}
+
+/* ---- Filter bar ---- */
+export function filterBar(fields, onApply) {
+  const id = 'filter-bar-' + Date.now();
+  let html = `<div class="filter-bar" id="${id}"><div class="filter-row">`;
+  html += `<select class="filter-field">`;
+  fields.forEach(f => { html += `<option value="${f.key}">${f.label}</option>`; });
+  html += `</select>`;
+  html += `<select class="filter-op">
+    <option value="eq">equals</option>
+    <option value="ne">not equal</option>
+    <option value="gt">greater than</option>
+    <option value="lt">less than</option>
+    <option value="gte">at least</option>
+    <option value="lte">at most</option>
+    <option value="contains">contains</option>
+  </select>`;
+  html += `<input type="text" class="filter-val" placeholder="Value...">`;
+  html += `<button class="btn btn-sm btn-primary filter-apply">Apply</button>`;
+  html += `<button class="btn btn-sm btn-outline filter-clear">Clear</button>`;
+  html += `</div></div>`;
+
+  setTimeout(() => {
+    const bar = document.getElementById(id);
+    if (!bar) return;
+    bar.querySelector('.filter-apply').onclick = () => {
+      const field = bar.querySelector('.filter-field').value;
+      const op = bar.querySelector('.filter-op').value;
+      const val = bar.querySelector('.filter-val').value.trim();
+      if (!val) return;
+      onApply({ field, op, value: val });
+    };
+    bar.querySelector('.filter-clear').onclick = () => {
+      bar.querySelector('.filter-val').value = '';
+      onApply(null);
+    };
+  }, 0);
+  return html;
+}
+
+/* ---- Pagination bar ---- */
+export function paginationBar(currentPage, pageSize, totalShown, onPage) {
+  const id = 'pagination-' + Date.now();
+  const hasPrev = currentPage > 0;
+  const hasNext = totalShown >= pageSize;
+  let html = `<div class="pagination-bar" id="${id}">`;
+  html += `<button class="btn btn-sm btn-outline pg-prev" ${hasPrev ? '' : 'disabled'}>&#8592; Prev</button>`;
+  html += `<span class="pg-info">Page ${currentPage + 1} (${totalShown} shown)</span>`;
+  html += `<button class="btn btn-sm btn-outline pg-next" ${hasNext ? '' : 'disabled'}>Next &#8594;</button>`;
+  html += `</div>`;
+  setTimeout(() => {
+    const bar = document.getElementById(id);
+    if (!bar) return;
+    bar.querySelector('.pg-prev').onclick = () => { if (hasPrev) onPage(currentPage - 1); };
+    bar.querySelector('.pg-next').onclick = () => { if (hasNext) onPage(currentPage + 1); };
+  }, 0);
+  return html;
 }

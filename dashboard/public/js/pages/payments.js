@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { toast, dataTable, buildForm, readForm, openModal, closeModal, kvDetail, badge, money } from '../components.js';
+import { toast, dataTable, buildForm, readForm, openModal, closeModal, kvDetail, badge, money, filterBar, paginationBar } from '../components.js';
 
 const TYPES = ['payments', 'refunds', 'credits', 'deposits'];
 
@@ -15,8 +15,12 @@ const REFUND_FIELDS = [
   { name: 'description', label: 'Description' },
 ];
 
+const PAGE_SIZE = 25;
+
 export async function paymentsPage(el) {
   let activeTab = 'payments';
+  let currentFilter = null;
+  let currentPage = 0;
 
   function render() {
     el.innerHTML = `
@@ -31,15 +35,32 @@ export async function paymentsPage(el) {
         <div class="tabs" id="txn-tabs">
           ${TYPES.map(t => `<button class="tab ${t === activeTab ? 'active' : ''}" data-tab="${t}">${t.charAt(0).toUpperCase() + t.slice(1)}</button>`).join('')}
         </div>
+        <div id="filter-area"></div>
         <div id="table-area"></div>
+        <div id="pagination-area"></div>
       </div>`;
+
+    document.getElementById('filter-area').innerHTML = filterBar(
+      [
+        { key: 'amount', label: 'Amount' },
+        { key: 'status', label: 'Status' },
+        { key: 'description', label: 'Description' },
+        { key: 'customer_id', label: 'Customer ID' },
+      ],
+      (f) => { currentFilter = f; currentPage = 0; loadTab(); }
+    );
   }
 
   async function loadTab() {
     const area = document.getElementById('table-area');
+    const pgArea = document.getElementById('pagination-area');
     area.innerHTML = '<div class="empty-state"><p>Loading...</p></div>';
     try {
-      const items = await api.list(activeTab, { limit: 100, orderBy: '-created_at' });
+      const params = { limit: PAGE_SIZE, offset: currentPage * PAGE_SIZE, orderBy: '-created_at' };
+      if (currentFilter) {
+        params[`filter.${currentFilter.field}.${currentFilter.op}`] = currentFilter.value;
+      }
+      const items = await api.list(activeTab, params);
       area.innerHTML = dataTable(
         [
           { key: 'id', label: 'ID', render: v => `<code>${v}</code>` },
@@ -54,8 +75,13 @@ export async function paymentsPage(el) {
           { name: 'void', label: 'Void', cls: 'btn-danger btn-sm' },
         ]
       );
+      pgArea.innerHTML = paginationBar(currentPage, PAGE_SIZE, items.length, (page) => {
+        currentPage = page;
+        loadTab();
+      });
     } catch (e) {
       area.innerHTML = `<p style="color:var(--c-danger)">${e.error || e.message}</p>`;
+      pgArea.innerHTML = '';
     }
   }
 
@@ -67,6 +93,8 @@ export async function paymentsPage(el) {
     const tab = e.target.closest('[data-tab]');
     if (tab) {
       activeTab = tab.dataset.tab;
+      currentFilter = null;
+      currentPage = 0;
       el.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === activeTab));
       await loadTab();
       return;

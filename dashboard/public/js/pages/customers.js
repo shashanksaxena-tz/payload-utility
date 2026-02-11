@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { toast, dataTable, buildForm, readForm, openModal, closeModal, kvDetail, badge } from '../components.js';
+import { toast, dataTable, buildForm, readForm, openModal, closeModal, kvDetail, badge, filterBar, paginationBar } from '../components.js';
 
 const FIELDS = [
   { name: 'name',  label: 'Name',  required: true },
@@ -7,20 +7,42 @@ const FIELDS = [
   { name: 'phone', label: 'Phone' },
 ];
 
+const PAGE_SIZE = 25;
+
 export async function customersPage(el) {
+  let currentFilter = null;
+  let currentPage = 0;
+
   el.innerHTML = `
     <div class="card">
       <div class="card-header">
         <h2>Customers</h2>
         <button class="btn btn-primary" id="btn-new">+ New Customer</button>
       </div>
+      <div id="filter-area"></div>
       <div id="table-area"></div>
+      <div id="pagination-area"></div>
     </div>`;
+
+  document.getElementById('filter-area').innerHTML = filterBar(
+    [
+      { key: 'name', label: 'Name' },
+      { key: 'email', label: 'Email' },
+      { key: 'phone', label: 'Phone' },
+      { key: 'status', label: 'Status' },
+    ],
+    (f) => { currentFilter = f; currentPage = 0; load(); }
+  );
 
   async function load() {
     const area = document.getElementById('table-area');
+    const pgArea = document.getElementById('pagination-area');
     try {
-      const items = await api.list('customers', { limit: 100, orderBy: '-created_at' });
+      const params = { limit: PAGE_SIZE, offset: currentPage * PAGE_SIZE, orderBy: '-created_at' };
+      if (currentFilter) {
+        params[`filter.${currentFilter.field}.${currentFilter.op}`] = currentFilter.value;
+      }
+      const items = await api.list('customers', params);
       area.innerHTML = dataTable(
         [
           { key: 'id', label: 'ID', render: v => `<code>${v}</code>` },
@@ -36,8 +58,13 @@ export async function customersPage(el) {
           { name: 'delete', label: 'Delete', cls: 'btn-danger btn-sm' },
         ]
       );
+      pgArea.innerHTML = paginationBar(currentPage, PAGE_SIZE, items.length, (page) => {
+        currentPage = page;
+        load();
+      });
     } catch (e) {
       area.innerHTML = `<p style="color:var(--c-danger)">${e.error || e.message}</p>`;
+      pgArea.innerHTML = '';
     }
   }
 
