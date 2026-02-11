@@ -1,0 +1,14 @@
+version: "3.8"
+
+services:
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    ports:
+      - "${DASHBOARD_PORT:-3000}:3000"
+    environment:
+      - PAYLOAD_API_KEY=${PAYLOAD_API_KEY:-}
+      - PAYLOAD_API_URL=${PAYLOAD_API_URL:-https://api.payload.co}
+      - DASHBOARD_PORT=3000
+    restart: unless-stopped
