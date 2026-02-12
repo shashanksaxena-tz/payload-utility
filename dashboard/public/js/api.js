@@ -56,6 +56,36 @@ export const api = {
     },
     txnEntries:     (txnId)  => request('GET', `/ledger/transaction/${txnId}/entries`),
     txnValidate:    (txnId)  => request('GET', `/ledger/transaction/${txnId}/validate`),
+    dailyBalances:  (acctId, start, end) => {
+      const qs = new URLSearchParams();
+      if (start) qs.set('startDate', start);
+      if (end)   qs.set('endDate', end);
+      const q = qs.toString();
+      return request('GET', `/ledger/daily-balances/${acctId}${q ? '?' + q : ''}`);
+    },
+    monthlyBalances: (acctId, start, end) => {
+      const qs = new URLSearchParams();
+      if (start) qs.set('startDate', start);
+      if (end)   qs.set('endDate', end);
+      const q = qs.toString();
+      return request('GET', `/ledger/monthly-balances/${acctId}${q ? '?' + q : ''}`);
+    },
+    statement:      (acctId, start, end) => {
+      const qs = new URLSearchParams();
+      if (start) qs.set('startDate', start);
+      if (end)   qs.set('endDate', end);
+      const q = qs.toString();
+      return request('GET', `/ledger/statement/${acctId}${q ? '?' + q : ''}`);
+    },
+    trialBalance:   (ids, asOfDate) => request('POST', '/ledger/trial-balance', { accountIds: ids, asOfDate }),
+    exportEntries:  (acctId, start, end, format) => {
+      const qs = new URLSearchParams();
+      if (start)  qs.set('startDate', start);
+      if (end)    qs.set('endDate', end);
+      if (format) qs.set('format', format);
+      const q = qs.toString();
+      return request('GET', `/ledger/export/${acctId}${q ? '?' + q : ''}`);
+    },
   },
 
   /* Dashboard */

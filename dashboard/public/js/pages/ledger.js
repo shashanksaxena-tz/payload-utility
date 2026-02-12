@@ -40,12 +40,17 @@ export async function ledgerPage(el) {
             <button class="btn btn-outline" id="btn-reversal">+ Reversal</button>
           </div>
         </div>
-        <div class="tabs">
+        <div class="tabs" style="flex-wrap:wrap">
           <button class="tab ${activeTab === 'entries' ? 'active' : ''}" data-tab="entries">All Entries</button>
           <button class="tab ${activeTab === 'balance' ? 'active' : ''}" data-tab="balance">Account Balance</button>
           <button class="tab ${activeTab === 'reconcile' ? 'active' : ''}" data-tab="reconcile">Reconciliation</button>
           <button class="tab ${activeTab === 'activity' ? 'active' : ''}" data-tab="activity">Activity Summary</button>
           <button class="tab ${activeTab === 'validate' ? 'active' : ''}" data-tab="validate">Validate Transaction</button>
+          <button class="tab ${activeTab === 'daily' ? 'active' : ''}" data-tab="daily">Daily Report</button>
+          <button class="tab ${activeTab === 'monthly' ? 'active' : ''}" data-tab="monthly">Monthly Report</button>
+          <button class="tab ${activeTab === 'statement' ? 'active' : ''}" data-tab="statement">Account Statement</button>
+          <button class="tab ${activeTab === 'trial' ? 'active' : ''}" data-tab="trial">Trial Balance</button>
+          <button class="tab ${activeTab === 'export' ? 'active' : ''}" data-tab="export">Export</button>
         </div>
         <div id="ledger-content"></div>
       </div>`;
@@ -238,6 +243,258 @@ export async function ledgerPage(el) {
               { key: 'metadata', label: 'Metadata', render: v => renderMetadata(v) },
             ], entries
           );
+        } catch (e) { toast(e.error || e.message, 'error'); }
+      };
+    }
+
+    /* ---- Daily Report tab ---- */
+    if (activeTab === 'daily') {
+      area.innerHTML = `
+        <div style="max-width:500px;margin-bottom:20px">
+          <p style="color:var(--c-text-secondary);margin-bottom:12px">View daily debit/credit aggregations with running balance for an account.</p>
+          ${buildForm([
+            { name: 'daily_acct', label: 'Account ID', required: true, placeholder: 'acct_revenue' },
+            { name: 'daily_start', label: 'Start Date', type: 'date', required: true },
+            { name: 'daily_end', label: 'End Date', type: 'date', required: true },
+          ])}
+          <div class="form-actions"><button class="btn btn-primary" id="btn-daily">Generate Daily Report</button></div>
+        </div>
+        <div id="daily-result"></div>`;
+      document.getElementById('btn-daily').onclick = async () => {
+        const acctId = document.getElementById('f-daily_acct').value.trim();
+        const start = document.getElementById('f-daily_start').value;
+        const end = document.getElementById('f-daily_end').value;
+        if (!acctId) return toast('Enter an account ID', 'error');
+        if (!start || !end) return toast('Select both start and end dates', 'error');
+        const res = document.getElementById('daily-result');
+        try {
+          const rows = await api.ledger.dailyBalances(acctId, start, end);
+          if (!rows.length) {
+            res.innerHTML = '<p style="color:var(--c-text-secondary)">No entries found for this date range.</p>';
+            return;
+          }
+          res.innerHTML = `
+            <h3 style="margin-bottom:8px">Daily Balances for ${acctId}</h3>` +
+            dataTable(
+              [
+                { key: 'date', label: 'Date' },
+                { key: 'debits', label: 'Debits', render: v => money(v) },
+                { key: 'credits', label: 'Credits', render: v => money(v) },
+                { key: 'net', label: 'Net', render: v => `<span style="color:${v >= 0 ? 'var(--c-success)' : 'var(--c-danger)'}">${money(v)}</span>` },
+                { key: 'runningBalance', label: 'Running Balance', render: v => `<strong>${money(v)}</strong>` },
+                { key: 'entryCount', label: 'Entries' },
+              ],
+              rows
+            );
+        } catch (e) {
+          res.innerHTML = `<p style="color:var(--c-danger)">${e.error || e.message}</p>`;
+        }
+      };
+    }
+
+    /* ---- Monthly Report tab ---- */
+    if (activeTab === 'monthly') {
+      area.innerHTML = `
+        <div style="max-width:500px;margin-bottom:20px">
+          <p style="color:var(--c-text-secondary);margin-bottom:12px">View monthly debit/credit aggregations with running balance for an account.</p>
+          ${buildForm([
+            { name: 'monthly_acct', label: 'Account ID', required: true, placeholder: 'acct_revenue' },
+            { name: 'monthly_start', label: 'Start Date', type: 'date', required: true },
+            { name: 'monthly_end', label: 'End Date', type: 'date', required: true },
+          ])}
+          <div class="form-actions"><button class="btn btn-primary" id="btn-monthly">Generate Monthly Report</button></div>
+        </div>
+        <div id="monthly-result"></div>`;
+      document.getElementById('btn-monthly').onclick = async () => {
+        const acctId = document.getElementById('f-monthly_acct').value.trim();
+        const start = document.getElementById('f-monthly_start').value;
+        const end = document.getElementById('f-monthly_end').value;
+        if (!acctId) return toast('Enter an account ID', 'error');
+        if (!start || !end) return toast('Select both start and end dates', 'error');
+        const res = document.getElementById('monthly-result');
+        try {
+          const rows = await api.ledger.monthlyBalances(acctId, start, end);
+          if (!rows.length) {
+            res.innerHTML = '<p style="color:var(--c-text-secondary)">No entries found for this date range.</p>';
+            return;
+          }
+          res.innerHTML = `
+            <h3 style="margin-bottom:8px">Monthly Balances for ${acctId}</h3>` +
+            dataTable(
+              [
+                { key: 'month', label: 'Month' },
+                { key: 'debits', label: 'Debits', render: v => money(v) },
+                { key: 'credits', label: 'Credits', render: v => money(v) },
+                { key: 'net', label: 'Net', render: v => `<span style="color:${v >= 0 ? 'var(--c-success)' : 'var(--c-danger)'}">${money(v)}</span>` },
+                { key: 'runningBalance', label: 'Running Balance', render: v => `<strong>${money(v)}</strong>` },
+                { key: 'entryCount', label: 'Entries' },
+              ],
+              rows
+            );
+        } catch (e) {
+          res.innerHTML = `<p style="color:var(--c-danger)">${e.error || e.message}</p>`;
+        }
+      };
+    }
+
+    /* ---- Account Statement tab ---- */
+    if (activeTab === 'statement') {
+      area.innerHTML = `
+        <div style="max-width:500px;margin-bottom:20px">
+          <p style="color:var(--c-text-secondary);margin-bottom:12px">Full account statement with opening/closing balance and per-entry running balance (like a bank statement).</p>
+          ${buildForm([
+            { name: 'stmt_acct', label: 'Account ID', required: true, placeholder: 'acct_revenue' },
+            { name: 'stmt_start', label: 'Start Date', type: 'date', required: true },
+            { name: 'stmt_end', label: 'End Date', type: 'date', required: true },
+          ])}
+          <div class="form-actions"><button class="btn btn-primary" id="btn-stmt">Generate Statement</button></div>
+        </div>
+        <div id="stmt-result"></div>`;
+      document.getElementById('btn-stmt').onclick = async () => {
+        const acctId = document.getElementById('f-stmt_acct').value.trim();
+        const start = document.getElementById('f-stmt_start').value;
+        const end = document.getElementById('f-stmt_end').value;
+        if (!acctId) return toast('Enter an account ID', 'error');
+        if (!start || !end) return toast('Select both start and end dates', 'error');
+        const res = document.getElementById('stmt-result');
+        try {
+          const s = await api.ledger.statement(acctId, start, end);
+          res.innerHTML = `
+            <div class="stats-grid">
+              <div class="stat-card"><div class="stat-label">Opening Balance</div><div class="stat-value">${money(s.openingBalance)}</div></div>
+              <div class="stat-card"><div class="stat-label">Total Debits</div><div class="stat-value">${money(s.totalDebits)}</div></div>
+              <div class="stat-card"><div class="stat-label">Total Credits</div><div class="stat-value">${money(s.totalCredits)}</div></div>
+              <div class="stat-card"><div class="stat-label">Closing Balance</div><div class="stat-value"><strong>${money(s.closingBalance)}</strong></div></div>
+            </div>
+            <h3 style="margin:16px 0 8px">Statement Entries (${s.entries.length})</h3>
+            ${s.entries.length ? dataTable(
+              [
+                { key: 'date', label: 'Date' },
+                { key: 'description', label: 'Description' },
+                { key: 'reference', label: 'Reference' },
+                { key: 'entryType', label: 'Type', render: v => v === 'debit'
+                  ? '<span class="badge badge-info">DR</span>'
+                  : '<span class="badge badge-warning">CR</span>' },
+                { key: 'amount', label: 'Amount', render: v => money(v) },
+                { key: 'runningBalance', label: 'Balance', render: v => `<strong>${money(v)}</strong>` },
+                { key: 'metadata', label: 'Metadata', render: v => renderMetadata(v) },
+              ],
+              s.entries
+            ) : '<p style="color:var(--c-text-secondary)">No entries in this date range.</p>'}`;
+        } catch (e) {
+          res.innerHTML = `<p style="color:var(--c-danger)">${e.error || e.message}</p>`;
+        }
+      };
+    }
+
+    /* ---- Trial Balance tab ---- */
+    if (activeTab === 'trial') {
+      area.innerHTML = `
+        <div style="max-width:500px;margin-bottom:20px">
+          <p style="color:var(--c-text-secondary);margin-bottom:12px">Generate a trial balance across multiple accounts. Verifies total debits equal total credits.</p>
+          ${buildForm([
+            { name: 'trial_accts', label: 'Account IDs (comma-separated)', required: true, placeholder: 'acct_revenue,acct_receivable,acct_fees', full: true },
+            { name: 'trial_date', label: 'As Of Date (optional)', type: 'date' },
+          ])}
+          <div class="form-actions"><button class="btn btn-primary" id="btn-trial">Generate Trial Balance</button></div>
+        </div>
+        <div id="trial-result"></div>`;
+      document.getElementById('btn-trial').onclick = async () => {
+        const ids = document.getElementById('f-trial_accts').value.split(',').map(s => s.trim()).filter(Boolean);
+        if (ids.length === 0) return toast('Enter at least one account ID', 'error');
+        const asOfDate = document.getElementById('f-trial_date').value || undefined;
+        const res = document.getElementById('trial-result');
+        try {
+          const t = await api.ledger.trialBalance(ids, asOfDate);
+          res.innerHTML = `
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-label">Balanced</div>
+                <div class="stat-value" style="color:${t.balanced ? 'var(--c-success)' : 'var(--c-danger)'}">${t.balanced ? 'YES' : 'NO'}</div>
+              </div>
+              <div class="stat-card"><div class="stat-label">Total Debit Balances</div><div class="stat-value">${money(t.totalDebits)}</div></div>
+              <div class="stat-card"><div class="stat-label">Total Credit Balances</div><div class="stat-value">${money(t.totalCredits)}</div></div>
+              <div class="stat-card"><div class="stat-label">As Of</div><div class="stat-value">${t.asOfDate}</div></div>
+            </div>
+            <h3 style="margin:16px 0 8px">Account Balances</h3>
+            ${dataTable(
+              [
+                { key: 'accountId', label: 'Account' },
+                { key: 'debitBalance', label: 'Debit Balance', render: v => v > 0 ? money(v) : '-' },
+                { key: 'creditBalance', label: 'Credit Balance', render: v => v > 0 ? money(v) : '-' },
+              ],
+              t.rows
+            )}
+            <div style="margin-top:12px;padding:12px;border-top:2px solid var(--c-border);display:flex;justify-content:space-between;font-weight:600">
+              <span>TOTALS</span>
+              <span>Debits: ${money(t.totalDebits)} &nbsp;|&nbsp; Credits: ${money(t.totalCredits)}</span>
+            </div>`;
+        } catch (e) {
+          res.innerHTML = `<p style="color:var(--c-danger)">${e.error || e.message}</p>`;
+        }
+      };
+    }
+
+    /* ---- Export tab ---- */
+    if (activeTab === 'export') {
+      area.innerHTML = `
+        <div style="max-width:500px;margin-bottom:20px">
+          <p style="color:var(--c-text-secondary);margin-bottom:12px">Export ledger entries for an account as JSON or CSV.</p>
+          ${buildForm([
+            { name: 'export_acct', label: 'Account ID', required: true, placeholder: 'acct_revenue' },
+            { name: 'export_start', label: 'Start Date (optional)', type: 'date' },
+            { name: 'export_end', label: 'End Date (optional)', type: 'date' },
+          ])}
+          <div class="form-group full" style="margin-top:8px">
+            <label style="font-size:12px;font-weight:600;color:var(--c-text-secondary);text-transform:uppercase;letter-spacing:.3px">FORMAT</label>
+            <select id="export-format" style="padding:8px 12px;border:1px solid var(--c-border);border-radius:6px;width:200px">
+              <option value="json">JSON</option>
+              <option value="csv">CSV</option>
+            </select>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-outline" id="btn-export-preview">Preview</button>
+            <button class="btn btn-primary" id="btn-export-download">Download</button>
+          </div>
+        </div>
+        <div id="export-result"></div>`;
+      document.getElementById('btn-export-preview').onclick = async () => {
+        const acctId = document.getElementById('f-export_acct').value.trim();
+        if (!acctId) return toast('Enter an account ID', 'error');
+        const start = document.getElementById('f-export_start').value || undefined;
+        const end = document.getElementById('f-export_end').value || undefined;
+        const format = document.getElementById('export-format').value;
+        const res = document.getElementById('export-result');
+        try {
+          const r = await api.ledger.exportEntries(acctId, start, end, format);
+          res.innerHTML = `
+            <p style="margin-bottom:8px;font-weight:600">${r.count} entries (${r.format.toUpperCase()})</p>
+            <pre style="background:var(--c-bg);border:1px solid var(--c-border);border-radius:6px;padding:12px;max-height:400px;overflow:auto;font-size:12px">${
+              typeof r.data === 'string' ? r.data.replace(/</g, '&lt;').replace(/>/g, '&gt;') : JSON.stringify(r, null, 2)
+            }</pre>`;
+        } catch (e) {
+          res.innerHTML = `<p style="color:var(--c-danger)">${e.error || e.message}</p>`;
+        }
+      };
+      document.getElementById('btn-export-download').onclick = async () => {
+        const acctId = document.getElementById('f-export_acct').value.trim();
+        if (!acctId) return toast('Enter an account ID', 'error');
+        const start = document.getElementById('f-export_start').value || undefined;
+        const end = document.getElementById('f-export_end').value || undefined;
+        const format = document.getElementById('export-format').value;
+        try {
+          const r = await api.ledger.exportEntries(acctId, start, end, format);
+          const content = typeof r.data === 'string' ? r.data : JSON.stringify(r, null, 2);
+          const blob = new Blob([content], { type: format === 'csv' ? 'text/csv' : 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `ledger_${acctId}.${format}`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          toast(`Downloaded ${r.count} entries as ${format.toUpperCase()}`, 'success');
         } catch (e) { toast(e.error || e.message, 'error'); }
       };
     }

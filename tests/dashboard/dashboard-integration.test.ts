@@ -278,6 +278,44 @@ beforeAll(async () => {
       res.json({ balanced });
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
+  app.get('/api/ledger/daily-balances/:accountId', async (req: any, res: any) => {
+    try {
+      const result = await sdk.ledger.getDailyBalances(
+        req.params.accountId, req.query.startDate, req.query.endDate
+      );
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+  app.get('/api/ledger/monthly-balances/:accountId', async (req: any, res: any) => {
+    try {
+      const result = await sdk.ledger.getMonthlyBalances(
+        req.params.accountId, req.query.startDate, req.query.endDate
+      );
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+  app.get('/api/ledger/statement/:accountId', async (req: any, res: any) => {
+    try {
+      const result = await sdk.ledger.getAccountStatement(
+        req.params.accountId, req.query.startDate, req.query.endDate
+      );
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+  app.post('/api/ledger/trial-balance', async (req: any, res: any) => {
+    try {
+      const result = await sdk.ledger.getTrialBalance(req.body.accountIds, req.body.asOfDate);
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
+  app.get('/api/ledger/export/:accountId', async (req: any, res: any) => {
+    try {
+      const result = await sdk.ledger.exportEntries(
+        req.params.accountId, req.query.startDate, req.query.endDate, req.query.format || 'json'
+      );
+      res.json(result);
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
 
   // Dashboard stats
   app.get('/api/dashboard/stats', async (_req: any, res: any) => {
@@ -1087,10 +1125,137 @@ describe('Dashboard API Integration Tests', () => {
   });
 
   /* ---------------------------------------------------------------- */
-  /*  19. DASHBOARD STATS                                              */
+  /*  19. LEDGER AUDIT & REPORTING                                     */
   /* ---------------------------------------------------------------- */
-  describe('19. Dashboard Stats', () => {
+  describe('19. Ledger Audit & Reporting', () => {
+    test('GET /api/ledger/daily-balances/:accountId returns daily aggregations', async () => {
+      await POST('/api/ledger/balanced-entry', {
+        debit:  { accountId: 'acct_daily', amount: 100, entryType: 'debit', description: 'D1' },
+        credit: { accountId: 'acct_other', amount: 100, entryType: 'credit', description: 'C1' },
+      });
+      await POST('/api/ledger/balanced-entry', {
+        debit:  { accountId: 'acct_daily', amount: 200, entryType: 'debit', description: 'D2' },
+        credit: { accountId: 'acct_other', amount: 200, entryType: 'credit', description: 'C2' },
+      });
+      const today = new Date().toISOString().slice(0, 10);
+      const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+      const { status, data } = await GET(`/api/ledger/daily-balances/acct_daily?startDate=${today}&endDate=${tomorrow}`);
+      expect(status).toBe(200);
+      expect(Array.isArray(data)).toBe(true);
+      expect(data.length).toBeGreaterThanOrEqual(1);
+      expect(data[0].date).toBe(today);
+      expect(data[0].debits).toBe(300);
+      expect(data[0].runningBalance).toBe(300);
+      expect(data[0].entryCount).toBe(2);
+    });
+
+    test('GET /api/ledger/monthly-balances/:accountId returns monthly aggregations', async () => {
+      await POST('/api/ledger/balanced-entry', {
+        debit:  { accountId: 'acct_monthly', amount: 500, entryType: 'debit', description: 'D' },
+        credit: { accountId: 'acct_other', amount: 500, entryType: 'credit', description: 'C' },
+      });
+      const yearMonth = new Date().toISOString().slice(0, 7);
+      const { status, data } = await GET(`/api/ledger/monthly-balances/acct_monthly?startDate=2020-01-01&endDate=2030-12-31`);
+      expect(status).toBe(200);
+      expect(Array.isArray(data)).toBe(true);
+      expect(data.length).toBeGreaterThanOrEqual(1);
+      expect(data[0].month).toBe(yearMonth);
+      expect(data[0].debits).toBe(500);
+      expect(data[0].runningBalance).toBe(500);
+    });
+
+    test('GET /api/ledger/statement/:accountId returns account statement', async () => {
+      await POST('/api/ledger/balanced-entry', {
+        debit:  { accountId: 'acct_stmt', amount: 400, entryType: 'debit', description: 'Initial deposit' },
+        credit: { accountId: 'acct_other', amount: 400, entryType: 'credit', description: 'C' },
+      });
+      await POST('/api/ledger/balanced-entry', {
+        debit:  { accountId: 'acct_other', amount: 100, entryType: 'debit', description: 'D' },
+        credit: { accountId: 'acct_stmt', amount: 100, entryType: 'credit', description: 'Withdrawal' },
+      });
+      const { status, data } = await GET(`/api/ledger/statement/acct_stmt?startDate=2020-01-01&endDate=2030-12-31`);
+      expect(status).toBe(200);
+      expect(data.accountId).toBe('acct_stmt');
+      expect(data.openingBalance).toBe(0);
+      expect(data.totalDebits).toBe(400);
+      expect(data.totalCredits).toBe(100);
+      expect(data.closingBalance).toBe(300);
+      expect(data.entries.length).toBe(2);
+      // Check running balance on entries
+      expect(data.entries[0].runningBalance).toBe(400);
+      expect(data.entries[1].runningBalance).toBe(300);
+    });
+
+    test('POST /api/ledger/trial-balance returns trial balance across accounts', async () => {
+      await POST('/api/ledger/balanced-entry', {
+        debit:  { accountId: 'acct_tb_a', amount: 600, entryType: 'debit', description: 'D' },
+        credit: { accountId: 'acct_tb_b', amount: 600, entryType: 'credit', description: 'C' },
+      });
+      const { status, data } = await POST('/api/ledger/trial-balance', {
+        accountIds: ['acct_tb_a', 'acct_tb_b'],
+      });
+      expect(status).toBe(200);
+      expect(data.balanced).toBe(true);
+      expect(data.totalDebits).toBe(600);
+      expect(data.totalCredits).toBe(600);
+      expect(data.rows.length).toBe(2);
+      expect(data.rows[0].accountId).toBe('acct_tb_a');
+      expect(data.rows[0].debitBalance).toBe(600);
+      expect(data.rows[1].accountId).toBe('acct_tb_b');
+      expect(data.rows[1].creditBalance).toBe(600);
+    });
+
+    test('GET /api/ledger/export/:accountId returns JSON export', async () => {
+      await POST('/api/ledger/balanced-entry', {
+        debit:  { accountId: 'acct_export', amount: 150, entryType: 'debit', description: 'Export test' },
+        credit: { accountId: 'acct_other', amount: 150, entryType: 'credit', description: 'C' },
+      });
+      const { status, data } = await GET('/api/ledger/export/acct_export?format=json');
+      expect(status).toBe(200);
+      expect(data.format).toBe('json');
+      expect(data.count).toBe(1);
+      expect(typeof data.data).toBe('string');
+      const entries = JSON.parse(data.data);
+      expect(entries[0].account_id).toBe('acct_export');
+      expect(entries[0].amount).toBe(150);
+    });
+
+    test('GET /api/ledger/export/:accountId returns CSV export', async () => {
+      await POST('/api/ledger/balanced-entry', {
+        debit:  { accountId: 'acct_csv', amount: 75, entryType: 'debit', description: 'CSV test' },
+        credit: { accountId: 'acct_other', amount: 75, entryType: 'credit', description: 'C' },
+      });
+      const { status, data } = await GET('/api/ledger/export/acct_csv?format=csv');
+      expect(status).toBe(200);
+      expect(data.format).toBe('csv');
+      expect(data.count).toBe(1);
+      expect(data.data).toContain('id,account_id');
+      expect(data.data).toContain('acct_csv');
+    });
+
+    test('daily/monthly return empty array for unknown account', async () => {
+      const daily = await GET('/api/ledger/daily-balances/acct_ghost?startDate=2026-01-01&endDate=2026-12-31');
+      expect(daily.status).toBe(200);
+      expect(daily.data).toEqual([]);
+
+      const monthly = await GET('/api/ledger/monthly-balances/acct_ghost?startDate=2026-01-01&endDate=2026-12-31');
+      expect(monthly.status).toBe(200);
+      expect(monthly.data).toEqual([]);
+    });
+
+    test('export returns zero count for unknown account', async () => {
+      const { status, data } = await GET('/api/ledger/export/acct_ghost?format=json');
+      expect(status).toBe(200);
+      expect(data.count).toBe(0);
+    });
+  });
+
+  /* ---------------------------------------------------------------- */
+  /*  20. DASHBOARD STATS                                              */
+  /* ---------------------------------------------------------------- */
+  describe('20. Dashboard Stats', () => {
     test('GET /api/dashboard/stats returns counts', async () => {
+
       await POST('/api/customers', { name: 'A' });
       await POST('/api/customers', { name: 'B' });
       await POST('/api/payments', { amount: 50 });
@@ -1102,9 +1267,9 @@ describe('Dashboard API Integration Tests', () => {
   });
 
   /* ---------------------------------------------------------------- */
-  /*  20. FULL E2E WORKFLOW                                            */
+  /*  21. FULL E2E WORKFLOW                                            */
   /* ---------------------------------------------------------------- */
-  describe('20. Full E2E Workflow', () => {
+  describe('21. Full E2E Workflow', () => {
     test('complete payment lifecycle: customer → card → payment → refund → ledger', async () => {
       // 1. Create customer
       const cust = await POST('/api/customers', { name: 'E2E User', email: 'e2e@test.com' });

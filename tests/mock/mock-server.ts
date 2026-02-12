@@ -129,13 +129,25 @@ class MockStore {
         const containsMatch = key.match(/^(.+)\?\*$/);
 
         if (gteMatch) {
-          results = results.filter(obj => Number(obj[gteMatch[1]]) >= Number(value));
+          results = results.filter(obj => {
+            const a = obj[gteMatch[1]], b = value;
+            return isNaN(Number(a)) || isNaN(Number(b)) ? String(a) >= String(b) : Number(a) >= Number(b);
+          });
         } else if (lteMatch) {
-          results = results.filter(obj => Number(obj[lteMatch[1]]) <= Number(value));
+          results = results.filter(obj => {
+            const a = obj[lteMatch[1]], b = value;
+            return isNaN(Number(a)) || isNaN(Number(b)) ? String(a) <= String(b) : Number(a) <= Number(b);
+          });
         } else if (gtMatch) {
-          results = results.filter(obj => Number(obj[gtMatch[1]]) > Number(value));
+          results = results.filter(obj => {
+            const a = obj[gtMatch[1]], b = value;
+            return isNaN(Number(a)) || isNaN(Number(b)) ? String(a) > String(b) : Number(a) > Number(b);
+          });
         } else if (ltMatch) {
-          results = results.filter(obj => Number(obj[ltMatch[1]]) < Number(value));
+          results = results.filter(obj => {
+            const a = obj[ltMatch[1]], b = value;
+            return isNaN(Number(a)) || isNaN(Number(b)) ? String(a) < String(b) : Number(a) < Number(b);
+          });
         } else if (neMatch) {
           results = results.filter(obj => String(obj[neMatch[1]]) !== value);
         } else if (containsMatch) {

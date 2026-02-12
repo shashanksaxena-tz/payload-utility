@@ -92,4 +92,9 @@ export {
   AccountBalance,
   ReconciliationResult,
   LedgerTransaction,
+  DailyBalance,
+  MonthlyBalance,
+  AccountStatement,
+  TrialBalanceRow,
+  TrialBalance,
 } from './ledger/ledger-manager';

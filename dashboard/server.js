@@ -331,6 +331,65 @@ app.get('/api/ledger/transaction/:txnId/validate', requireSdk, async (req, res) 
   }
 });
 
+app.get('/api/ledger/daily-balances/:accountId', requireSdk, async (req, res) => {
+  try {
+    const result = await sdk.ledger.getDailyBalances(
+      req.params.accountId, req.query.startDate, req.query.endDate
+    );
+    res.json(result);
+  } catch (e) {
+    res.status(e.statusCode || 500).json({ error: e.message });
+  }
+});
+
+app.get('/api/ledger/monthly-balances/:accountId', requireSdk, async (req, res) => {
+  try {
+    const result = await sdk.ledger.getMonthlyBalances(
+      req.params.accountId, req.query.startDate, req.query.endDate
+    );
+    res.json(result);
+  } catch (e) {
+    res.status(e.statusCode || 500).json({ error: e.message });
+  }
+});
+
+app.get('/api/ledger/statement/:accountId', requireSdk, async (req, res) => {
+  try {
+    const result = await sdk.ledger.getAccountStatement(
+      req.params.accountId, req.query.startDate, req.query.endDate
+    );
+    res.json(result);
+  } catch (e) {
+    res.status(e.statusCode || 500).json({ error: e.message });
+  }
+});
+
+app.post('/api/ledger/trial-balance', requireSdk, async (req, res) => {
+  try {
+    const result = await sdk.ledger.getTrialBalance(req.body.accountIds, req.body.asOfDate);
+    res.json(result);
+  } catch (e) {
+    res.status(e.statusCode || 500).json({ error: e.message });
+  }
+});
+
+app.get('/api/ledger/export/:accountId', requireSdk, async (req, res) => {
+  try {
+    const result = await sdk.ledger.exportEntries(
+      req.params.accountId, req.query.startDate, req.query.endDate, req.query.format || 'json'
+    );
+    if (result.format === 'csv') {
+      res.set('Content-Type', 'text/csv');
+      res.set('Content-Disposition', `attachment; filename=ledger_${req.params.accountId}.csv`);
+      res.send(result.data);
+    } else {
+      res.json(result);
+    }
+  } catch (e) {
+    res.status(e.statusCode || 500).json({ error: e.message });
+  }
+});
+
 /* ------------------------------------------------------------------ */
 /*  Dashboard stats                                                    */
 /* ------------------------------------------------------------------ */

@@ -63,6 +63,58 @@ export interface LedgerTransaction {
   createdAt: string;
 }
 
+export interface DailyBalance {
+  date: string;
+  debits: number;
+  credits: number;
+  net: number;
+  runningBalance: number;
+  entryCount: number;
+}
+
+export interface MonthlyBalance {
+  month: string;
+  debits: number;
+  credits: number;
+  net: number;
+  runningBalance: number;
+  entryCount: number;
+}
+
+export interface AccountStatement {
+  accountId: string;
+  startDate: string;
+  endDate: string;
+  openingBalance: number;
+  closingBalance: number;
+  entries: Array<{
+    id: string;
+    date: string;
+    description: string;
+    reference: string;
+    entryType: 'debit' | 'credit';
+    amount: number;
+    runningBalance: number;
+    metadata?: Record<string, unknown> | null;
+  }>;
+  totalDebits: number;
+  totalCredits: number;
+}
+
+export interface TrialBalanceRow {
+  accountId: string;
+  debitBalance: number;
+  creditBalance: number;
+}
+
+export interface TrialBalance {
+  asOfDate: string;
+  rows: TrialBalanceRow[];
+  totalDebits: number;
+  totalCredits: number;
+  balanced: boolean;
+}
+
 export class LedgerManager {
   private readonly session: Session;
 
@@ -348,6 +400,276 @@ export class LedgerManager {
       totalCredits,
       netChange: totalDebits - totalCredits,
     };
+  }
+
+  /**
+   * Get daily balance aggregations for an account within a date range.
+   * Returns one row per day that has ledger activity.
+   */
+  async getDailyBalances(
+    accountId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<DailyBalance[]> {
+    const filters: (Filter | Record<string, unknown>)[] = [{ account_id: accountId }];
+    if (startDate) {
+      filters.push((attr as Record<string, AttrChainLike>).created_at.gte(startDate));
+    }
+    if (endDate) {
+      filters.push((attr as Record<string, AttrChainLike>).created_at.lte(endDate));
+    }
+
+    const entries = await this.session.Ledger.filterBy(...filters).all();
+
+    // Group entries by date (YYYY-MM-DD)
+    const dayMap = new Map<string, { debits: number; credits: number; count: number }>();
+    for (const entry of entries) {
+      const day = (entry.createdAt || '').slice(0, 10);
+      if (!day) continue;
+      const bucket = dayMap.get(day) || { debits: 0, credits: 0, count: 0 };
+      if (entry.entryType === 'debit') {
+        bucket.debits += entry.amount;
+      } else {
+        bucket.credits += entry.amount;
+      }
+      bucket.count++;
+      dayMap.set(day, bucket);
+    }
+
+    // Sort by date and compute running balance
+    const sortedDays = Array.from(dayMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    let runningBalance = 0;
+    return sortedDays.map(([date, bucket]) => {
+      const net = bucket.debits - bucket.credits;
+      runningBalance += net;
+      return {
+        date,
+        debits: bucket.debits,
+        credits: bucket.credits,
+        net,
+        runningBalance,
+        entryCount: bucket.count,
+      };
+    });
+  }
+
+  /**
+   * Get monthly balance aggregations for an account within a date range.
+   * Returns one row per month that has ledger activity.
+   */
+  async getMonthlyBalances(
+    accountId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<MonthlyBalance[]> {
+    const filters: (Filter | Record<string, unknown>)[] = [{ account_id: accountId }];
+    if (startDate) {
+      filters.push((attr as Record<string, AttrChainLike>).created_at.gte(startDate));
+    }
+    if (endDate) {
+      filters.push((attr as Record<string, AttrChainLike>).created_at.lte(endDate));
+    }
+
+    const entries = await this.session.Ledger.filterBy(...filters).all();
+
+    // Group by month (YYYY-MM)
+    const monthMap = new Map<string, { debits: number; credits: number; count: number }>();
+    for (const entry of entries) {
+      const month = (entry.createdAt || '').slice(0, 7);
+      if (!month) continue;
+      const bucket = monthMap.get(month) || { debits: 0, credits: 0, count: 0 };
+      if (entry.entryType === 'debit') {
+        bucket.debits += entry.amount;
+      } else {
+        bucket.credits += entry.amount;
+      }
+      bucket.count++;
+      monthMap.set(month, bucket);
+    }
+
+    const sortedMonths = Array.from(monthMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    let runningBalance = 0;
+    return sortedMonths.map(([month, bucket]) => {
+      const net = bucket.debits - bucket.credits;
+      runningBalance += net;
+      return {
+        month,
+        debits: bucket.debits,
+        credits: bucket.credits,
+        net,
+        runningBalance,
+        entryCount: bucket.count,
+      };
+    });
+  }
+
+  /**
+   * Generate a full account statement with running balance per entry.
+   * Similar to a bank statement — shows every entry chronologically
+   * with an opening and closing balance.
+   */
+  async getAccountStatement(
+    accountId: string,
+    startDate: string,
+    endDate: string
+  ): Promise<AccountStatement> {
+    // Get all entries for this account (before the range to compute opening balance)
+    const allEntries = await this.session.Ledger
+      .filterBy({ account_id: accountId })
+      .all();
+
+    // Split into entries before the range and entries in the range
+    let openingBalance = 0;
+    const rangeEntries: Ledger[] = [];
+
+    for (const entry of allEntries) {
+      const date = entry.createdAt || '';
+      if (date < startDate) {
+        openingBalance += entry.entryType === 'debit' ? entry.amount : -entry.amount;
+      } else if (date <= endDate || !endDate) {
+        rangeEntries.push(entry);
+      }
+    }
+
+    // Sort range entries chronologically
+    rangeEntries.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+
+    let runningBalance = openingBalance;
+    let totalDebits = 0;
+    let totalCredits = 0;
+
+    const entries = rangeEntries.map(entry => {
+      const amount = entry.amount;
+      if (entry.entryType === 'debit') {
+        runningBalance += amount;
+        totalDebits += amount;
+      } else {
+        runningBalance -= amount;
+        totalCredits += amount;
+      }
+      return {
+        id: entry.id,
+        date: entry.createdAt,
+        description: entry.description,
+        reference: entry.reference,
+        entryType: entry.entryType as 'debit' | 'credit',
+        amount,
+        runningBalance,
+        metadata: entry.metadata,
+      };
+    });
+
+    return {
+      accountId,
+      startDate,
+      endDate,
+      openingBalance,
+      closingBalance: runningBalance,
+      entries,
+      totalDebits,
+      totalCredits,
+    };
+  }
+
+  /**
+   * Generate a trial balance across all specified accounts.
+   * Lists each account with its debit or credit balance,
+   * and verifies the totals match (balanced system).
+   */
+  async getTrialBalance(accountIds: string[], asOfDate?: string): Promise<TrialBalance> {
+    const rows: TrialBalanceRow[] = [];
+    let totalDebits = 0;
+    let totalCredits = 0;
+
+    for (const accountId of accountIds) {
+      const filters: (Filter | Record<string, unknown>)[] = [{ account_id: accountId }];
+      if (asOfDate) {
+        filters.push((attr as Record<string, AttrChainLike>).created_at.lte(asOfDate));
+      }
+
+      const entries = await this.session.Ledger.filterBy(...filters).all();
+      let debits = 0;
+      let credits = 0;
+
+      for (const entry of entries) {
+        if (entry.entryType === 'debit') {
+          debits += entry.amount;
+        } else {
+          credits += entry.amount;
+        }
+      }
+
+      const net = debits - credits;
+      const row: TrialBalanceRow = {
+        accountId,
+        debitBalance: net > 0 ? net : 0,
+        creditBalance: net < 0 ? Math.abs(net) : 0,
+      };
+
+      rows.push(row);
+      totalDebits += row.debitBalance;
+      totalCredits += row.creditBalance;
+    }
+
+    return {
+      asOfDate: asOfDate || new Date().toISOString().slice(0, 10),
+      rows,
+      totalDebits,
+      totalCredits,
+      balanced: Math.abs(totalDebits - totalCredits) < 0.001,
+    };
+  }
+
+  /**
+   * Export ledger entries for an account as structured data (for CSV/JSON export).
+   * Returns raw entry records suitable for download.
+   */
+  async exportEntries(
+    accountId: string,
+    startDate?: string,
+    endDate?: string,
+    format: 'json' | 'csv' = 'json'
+  ): Promise<{ format: string; data: string; count: number }> {
+    const filters: (Filter | Record<string, unknown>)[] = [{ account_id: accountId }];
+    if (startDate) {
+      filters.push((attr as Record<string, AttrChainLike>).created_at.gte(startDate));
+    }
+    if (endDate) {
+      filters.push((attr as Record<string, AttrChainLike>).created_at.lte(endDate));
+    }
+
+    const entries = await this.session.Ledger.filterBy(...filters).all();
+
+    const records = entries.map(entry => ({
+      id: entry.id,
+      account_id: entry.accountId,
+      entry_type: entry.entryType,
+      amount: entry.amount,
+      description: entry.description,
+      reference: entry.reference,
+      metadata: entry.metadata,
+      created_at: entry.createdAt,
+    }));
+
+    if (format === 'csv') {
+      const headers = ['id', 'account_id', 'entry_type', 'amount', 'description', 'reference', 'metadata', 'created_at'];
+      const csvRows = [headers.join(',')];
+      for (const r of records) {
+        csvRows.push([
+          r.id,
+          r.account_id,
+          r.entry_type,
+          r.amount,
+          `"${(r.description || '').replace(/"/g, '""')}"`,
+          `"${(r.reference || '').replace(/"/g, '""')}"`,
+          `"${r.metadata ? JSON.stringify(r.metadata).replace(/"/g, '""') : ''}"`,
+          r.created_at,
+        ].join(','));
+      }
+      return { format: 'csv', data: csvRows.join('\n'), count: records.length };
+    }
+
+    return { format: 'json', data: JSON.stringify(records, null, 2), count: records.length };
   }
 }
 
