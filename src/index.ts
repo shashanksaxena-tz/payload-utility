@@ -55,11 +55,20 @@ export {
 // --- Spec01: Core Objects ---
 export { Account } from './spec01/account';
 export { Customer } from './spec01/customer';
-export { Transaction } from './spec01/transaction';
+export {
+  Transaction,
+  TransactionStatus,
+  TransactionParticipant,
+  TransactionSource,
+  TransferType,
+  TransactionType,
+} from './spec01/transaction';
 export { Payment } from './spec01/payment';
 export { Refund } from './spec01/refund';
 export { Credit } from './spec01/credit';
 export { Deposit } from './spec01/deposit';
+export { Withdraw } from './spec01/withdraw';
+export { Payout } from './spec01/payout';
 export { PaymentMethod } from './spec01/payment-method';
 export { Card } from './spec01/card';
 export { BankAccount } from './spec01/bank-account';

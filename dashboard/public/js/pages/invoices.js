@@ -37,12 +37,18 @@ export async function invoicesPage(el) {
             <button class="btn btn-outline" id="btn-new-payment-item">+ Payment Item</button>
           </div>
         </div>
+        <p style="margin-bottom:12px;color:var(--c-text-secondary);font-size:12px">
+          Create invoices with line items, track payment status, and manage the invoice lifecycle
+          (draft, sent, paid, void).
+        </p>
         <div class="tabs">
           <button class="tab ${activeTab === 'invoices' ? 'active' : ''}" data-tab="invoices">Invoices</button>
           <button class="tab ${activeTab === 'items' ? 'active' : ''}" data-tab="items">Invoice Items</button>
           <button class="tab ${activeTab === 'line-items' ? 'active' : ''}" data-tab="line-items">Line Items</button>
         </div>
-        <div id="table-area"></div>
+        <div id="table-area">
+          <div class="empty-state"><p>Loading...</p></div>
+        </div>
       </div>`;
   }
 
@@ -51,7 +57,7 @@ export async function invoicesPage(el) {
     area.innerHTML = '<div class="empty-state"><p>Loading...</p></div>';
     try {
       if (activeTab === 'invoices') {
-        const items = await api.list('invoices', { limit: 100, orderBy: '-created_at' });
+        const items = await api.list('invoices', { limit: 20, orderBy: '-created_at' });
         area.innerHTML = dataTable(
           [
             { key: 'id', label: 'ID', render: v => `<code>${v}</code>` },
@@ -71,7 +77,7 @@ export async function invoicesPage(el) {
           ]
         );
       } else if (activeTab === 'items') {
-        const items = await api.list('invoice-items', { limit: 100 });
+        const items = await api.list('invoice-items', { limit: 20 });
         area.innerHTML = dataTable(
           [
             { key: 'id', label: 'ID', render: v => `<code>${v}</code>` },
@@ -85,8 +91,8 @@ export async function invoicesPage(el) {
           [{ name: 'view', label: 'View', cls: 'btn-outline' }]
         );
       } else {
-        const charges = await api.list('charge-items', { limit: 50 });
-        const pmts = await api.list('payment-items', { limit: 50 });
+        const charges = await api.list('charge-items', { limit: 50 }).catch(() => []);
+        const pmts = await api.list('payment-items', { limit: 50 }).catch(() => []);
         const combined = [...charges.map(c => ({...c, _type:'charge'})), ...pmts.map(p => ({...p, _type:'payment'}))];
         area.innerHTML = dataTable(
           [
@@ -101,7 +107,7 @@ export async function invoicesPage(el) {
         );
       }
     } catch (e) {
-      area.innerHTML = `<p style="color:var(--c-danger)">${e.error || e.message}</p>`;
+      area.innerHTML = `<div class="empty-state"><p style="color:var(--c-danger)">Failed to load: ${e.error || e.message}</p></div>`;
     }
   }
 

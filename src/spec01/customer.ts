@@ -1,18 +1,15 @@
-import { Model, ModelSpec } from '../core/model';
+import { ModelSpec } from '../core/model';
+import { Account } from './account';
 
 /**
- * Customer - Represents a customer in the Payload system.
- * Customers can have payment methods and transactions.
+ * Customer - Polymorphic child of Account.
+ * In Payload V2, customers are Account objects with type='customer'.
+ * There is no separate /customers endpoint; all operations go through /accounts.
  */
-export class Customer extends Model {
+export class Customer extends Account {
   static spec: ModelSpec = {
-    object: 'customer',
-    endpoint: '/customers',
+    object: 'account',
+    endpoint: '/accounts',
+    polymorphic: { type: 'customer' },
   };
-
-  get email(): string { return this.getStr('email'); }
-  get name(): string { return this.getStr('name'); }
-  get phone(): string { return this.getStr('phone'); }
-  get status(): string { return this.getStr('status'); }
-  get createdAt(): string { return this.getStr('created_at'); }
 }

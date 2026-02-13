@@ -156,7 +156,6 @@ export class Model {
     const endpoint = (this.constructor as typeof Model).getEndpoint();
 
     const response = await this._request.put(endpoint, this.id, {
-      object: spec.object,
       ...attrs,
     });
 
@@ -273,7 +272,16 @@ export class QueryBuilder<T extends Model> {
       this._queryOptions
     );
 
-    const items = Array.isArray(response.data) ? response.data : [response.data];
+    // V2 API returns { object: 'list', values: [...] } for list responses
+    let items: unknown[];
+    const data = response.data as Record<string, unknown>;
+    if (Array.isArray(data)) {
+      items = data;
+    } else if (data && data.object === 'list' && Array.isArray(data.values)) {
+      items = data.values as unknown[];
+    } else {
+      items = [data];
+    }
     return items.map(item => {
       const instance = new this.ModelClass(item as ModelData);
       instance.bindRequest(this.request);
@@ -320,7 +328,6 @@ export class ModelOperations<T extends Model> {
   /** Create a new object */
   async create(data: ModelData): Promise<T> {
     const body: ModelData = {
-      object: this.spec.object,
       ...data,
     };
 

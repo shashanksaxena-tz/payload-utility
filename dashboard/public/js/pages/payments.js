@@ -32,11 +32,17 @@ export async function paymentsPage(el) {
             <button class="btn btn-outline" id="btn-new-refund">+ Refund</button>
           </div>
         </div>
+        <p style="margin-bottom:12px;color:var(--c-text-secondary);font-size:12px">
+          Transactions include payments, refunds, credits, and deposits. Each type shares
+          the <code>/transactions</code> endpoint with a <code>type</code> discriminator.
+        </p>
         <div class="tabs" id="txn-tabs">
           ${TYPES.map(t => `<button class="tab ${t === activeTab ? 'active' : ''}" data-tab="${t}">${t.charAt(0).toUpperCase() + t.slice(1)}</button>`).join('')}
         </div>
         <div id="filter-area"></div>
-        <div id="table-area"></div>
+        <div id="table-area">
+          <div class="empty-state"><p>Loading transactions...</p></div>
+        </div>
         <div id="pagination-area"></div>
       </div>`;
 
@@ -80,7 +86,8 @@ export async function paymentsPage(el) {
         loadTab();
       });
     } catch (e) {
-      area.innerHTML = `<p style="color:var(--c-danger)">${e.error || e.message}</p>`;
+      area.innerHTML = `<div class="empty-state"><p style="color:var(--c-danger)">Failed to load ${activeTab}: ${e.error || e.message}</p>
+        <p style="margin-top:8px"><button class="btn btn-outline btn-sm" onclick="location.reload()">Retry</button></p></div>`;
       pgArea.innerHTML = '';
     }
   }

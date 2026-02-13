@@ -16,13 +16,19 @@ export async function transfersPage(el) {
         <h2>Transfers</h2>
         <button class="btn btn-primary" id="btn-new">+ New Transfer</button>
       </div>
-      <div id="table-area"></div>
+      <p style="margin-bottom:12px;color:var(--c-text-secondary);font-size:12px">
+        Move funds between accounts (e.g., platform to merchant payouts, internal allocations).
+      </p>
+      <div id="table-area">
+        <div class="empty-state"><p>Loading...</p></div>
+      </div>
     </div>`;
 
   async function load() {
     const area = document.getElementById('table-area');
+    area.innerHTML = '<div class="empty-state"><p>Loading...</p></div>';
     try {
-      const items = await api.list('transfers', { limit: 100, orderBy: '-created_at' });
+      const items = await api.list('transfers', { limit: 20, orderBy: '-created_at' });
       area.innerHTML = dataTable(
         [
           { key: 'id', label: 'ID', render: v => `<code>${v}</code>` },
@@ -39,7 +45,7 @@ export async function transfersPage(el) {
         ]
       );
     } catch (e) {
-      area.innerHTML = `<p style="color:var(--c-danger)">${e.error || e.message}</p>`;
+      area.innerHTML = `<div class="empty-state"><p style="color:var(--c-danger)">Failed to load: ${e.error || e.message}</p></div>`;
     }
   }
 

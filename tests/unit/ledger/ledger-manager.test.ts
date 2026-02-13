@@ -3,50 +3,9 @@ import { Session } from '../../../src/core/session';
 import { Ledger } from '../../../src/spec02/ledger';
 import { clearObjectCache } from '../../../src/core/model';
 
-// Mock the Session's Ledger operations
-function createMockSession(dateOverride?: string): Session & { _ledgerStore: Array<Record<string, unknown>> } {
-  const ledgerStore: Array<Record<string, unknown>> = [];
-  let idCounter = 0;
-
-  const mockSession = {
-    _ledgerStore: ledgerStore,
-    Ledger: {
-      create: jest.fn(async (data: Record<string, unknown>) => {
-        const entry = {
-          ...data,
-          id: `ledger_${++idCounter}`,
-          created_at: dateOverride || new Date().toISOString(),
-        };
-        ledgerStore.push(entry);
-        return new Ledger(entry);
-      }),
-      filterBy: jest.fn((...filters: any[]) => ({
-        all: jest.fn(async () => {
-          let results = [...ledgerStore];
-          for (const filter of filters) {
-            if (typeof filter === 'object' && !('key' in filter)) {
-              for (const [key, value] of Object.entries(filter)) {
-                results = results.filter(item => item[key] === value);
-              }
-            }
-            // Handle Filter objects from attr (key/op/value pattern)
-            if (typeof filter === 'object' && 'key' in filter) {
-              const f = filter as { key: string; op: string; value: unknown };
-              results = results.filter(item => {
-                const v = item[f.key];
-                if (f.op === 'gte') return (v as string) >= (f.value as string);
-                if (f.op === 'lte') return (v as string) <= (f.value as string);
-                return true;
-              });
-            }
-          }
-          return results.map(entry => new Ledger(entry));
-        }),
-      })),
-    },
-  } as unknown as Session & { _ledgerStore: Array<Record<string, unknown>> };
-
-  return mockSession;
+// Create a minimal mock session (LedgerManager no longer calls session.Ledger)
+function createMockSession(): Session {
+  return {} as unknown as Session;
 }
 
 beforeEach(() => {
@@ -54,7 +13,7 @@ beforeEach(() => {
 });
 
 describe('LedgerManager', () => {
-  let session: ReturnType<typeof createMockSession>;
+  let session: Session;
   let manager: LedgerManager;
 
   beforeEach(() => {
@@ -83,7 +42,8 @@ describe('LedgerManager', () => {
       expect(result.credit).toBeInstanceOf(Ledger);
       expect(result.debit.amount).toBe(100);
       expect(result.credit.amount).toBe(100);
-      expect(session.Ledger.create).toHaveBeenCalledTimes(2);
+      expect(result.debit.entryType).toBe('debit');
+      expect(result.credit.entryType).toBe('credit');
     });
 
     it('should reject imbalanced entries', async () => {
@@ -123,7 +83,7 @@ describe('LedgerManager', () => {
       ]);
 
       expect(entries).toHaveLength(3);
-      expect(session.Ledger.create).toHaveBeenCalledTimes(3);
+      expect(entries[0]).toBeInstanceOf(Ledger);
     });
 
     it('should reject imbalanced multi-leg entries', async () => {
@@ -146,7 +106,6 @@ describe('LedgerManager', () => {
 
   describe('getAccountBalance', () => {
     it('should compute correct balance from entries', async () => {
-      // Create some entries
       await manager.createBalancedEntry({
         debit: { accountId: 'acct_1', amount: 100, entryType: 'debit', description: 'D1' },
         credit: { accountId: 'acct_2', amount: 100, entryType: 'credit', description: 'C1' },
@@ -248,13 +207,16 @@ describe('LedgerManager', () => {
 
   describe('getDailyBalances', () => {
     it('should aggregate entries by day with running balance', async () => {
-      // Create entries on different days by directly populating the store
-      session._ledgerStore.push(
-        { account_id: 'acct_1', amount: 100, entry_type: 'debit', description: 'D1', created_at: '2026-01-15T10:00:00Z', id: 'l_1' },
-        { account_id: 'acct_1', amount: 50, entry_type: 'debit', description: 'D2', created_at: '2026-01-15T14:00:00Z', id: 'l_2' },
-        { account_id: 'acct_1', amount: 30, entry_type: 'credit', description: 'C1', created_at: '2026-01-16T09:00:00Z', id: 'l_3' },
-        { account_id: 'acct_1', amount: 200, entry_type: 'debit', description: 'D3', created_at: '2026-01-17T12:00:00Z', id: 'l_4' },
-      );
+      // Manually add entries with specific dates using createTransactionEntry-like approach
+      // We use the internal method through the public API by creating entries that have specific timestamps
+      // Since createLocalEntry uses current time, we need to use importEntries
+      const data = JSON.stringify([
+        { account_id: 'acct_1', amount: 100, entry_type: 'debit', description: 'D1', created_at: '2026-01-15T10:00:00Z' },
+        { account_id: 'acct_1', amount: 50, entry_type: 'debit', description: 'D2', created_at: '2026-01-15T14:00:00Z' },
+        { account_id: 'acct_1', amount: 30, entry_type: 'credit', description: 'C1', created_at: '2026-01-16T09:00:00Z' },
+        { account_id: 'acct_1', amount: 200, entry_type: 'debit', description: 'D3', created_at: '2026-01-17T12:00:00Z' },
+      ]);
+      manager.importEntries(data);
 
       const days = await manager.getDailyBalances('acct_1', '2026-01-15', '2026-01-17T23:59:59Z');
       expect(days).toHaveLength(3);
@@ -282,12 +244,13 @@ describe('LedgerManager', () => {
 
   describe('getMonthlyBalances', () => {
     it('should aggregate entries by month with running balance', async () => {
-      session._ledgerStore.push(
-        { account_id: 'acct_1', amount: 500, entry_type: 'debit', description: 'Jan sale', created_at: '2026-01-15T10:00:00Z', id: 'l_1' },
-        { account_id: 'acct_1', amount: 100, entry_type: 'credit', description: 'Jan refund', created_at: '2026-01-20T10:00:00Z', id: 'l_2' },
-        { account_id: 'acct_1', amount: 700, entry_type: 'debit', description: 'Feb sale', created_at: '2026-02-10T10:00:00Z', id: 'l_3' },
-        { account_id: 'acct_1', amount: 300, entry_type: 'debit', description: 'Mar sale', created_at: '2026-03-05T10:00:00Z', id: 'l_4' },
-      );
+      const data = JSON.stringify([
+        { account_id: 'acct_1', amount: 500, entry_type: 'debit', description: 'Jan sale', created_at: '2026-01-15T10:00:00Z' },
+        { account_id: 'acct_1', amount: 100, entry_type: 'credit', description: 'Jan refund', created_at: '2026-01-20T10:00:00Z' },
+        { account_id: 'acct_1', amount: 700, entry_type: 'debit', description: 'Feb sale', created_at: '2026-02-10T10:00:00Z' },
+        { account_id: 'acct_1', amount: 300, entry_type: 'debit', description: 'Mar sale', created_at: '2026-03-05T10:00:00Z' },
+      ]);
+      manager.importEntries(data);
 
       const months = await manager.getMonthlyBalances('acct_1', '2026-01-01', '2026-03-31T23:59:59Z');
       expect(months).toHaveLength(3);
@@ -308,16 +271,15 @@ describe('LedgerManager', () => {
 
   describe('getAccountStatement', () => {
     it('should compute opening/closing balance and per-entry running balance', async () => {
-      // Pre-range entry (counts toward opening balance)
-      session._ledgerStore.push(
-        { account_id: 'acct_1', amount: 200, entry_type: 'debit', description: 'Prior', created_at: '2025-12-15T10:00:00Z', id: 'l_0', reference: '' },
-      );
-      // In-range entries
-      session._ledgerStore.push(
-        { account_id: 'acct_1', amount: 100, entry_type: 'debit', description: 'Sale', created_at: '2026-01-10T10:00:00Z', id: 'l_1', reference: 'ref1' },
-        { account_id: 'acct_1', amount: 50, entry_type: 'credit', description: 'Refund', created_at: '2026-01-15T10:00:00Z', id: 'l_2', reference: 'ref2' },
-        { account_id: 'acct_1', amount: 75, entry_type: 'debit', description: 'Fee', created_at: '2026-01-20T10:00:00Z', id: 'l_3', reference: '' },
-      );
+      const data = JSON.stringify([
+        // Pre-range entry (counts toward opening balance)
+        { account_id: 'acct_1', amount: 200, entry_type: 'debit', description: 'Prior', created_at: '2025-12-15T10:00:00Z', reference: '' },
+        // In-range entries
+        { account_id: 'acct_1', amount: 100, entry_type: 'debit', description: 'Sale', created_at: '2026-01-10T10:00:00Z', reference: 'ref1' },
+        { account_id: 'acct_1', amount: 50, entry_type: 'credit', description: 'Refund', created_at: '2026-01-15T10:00:00Z', reference: 'ref2' },
+        { account_id: 'acct_1', amount: 75, entry_type: 'debit', description: 'Fee', created_at: '2026-01-20T10:00:00Z', reference: '' },
+      ]);
+      manager.importEntries(data);
 
       const stmt = await manager.getAccountStatement('acct_1', '2026-01-01', '2026-01-31T23:59:59Z');
       expect(stmt.accountId).toBe('acct_1');
@@ -337,9 +299,11 @@ describe('LedgerManager', () => {
     });
 
     it('should return zero opening balance when no prior entries', async () => {
-      session._ledgerStore.push(
-        { account_id: 'acct_1', amount: 100, entry_type: 'debit', description: 'D', created_at: '2026-01-10T10:00:00Z', id: 'l_1', reference: '' },
-      );
+      const data = JSON.stringify([
+        { account_id: 'acct_1', amount: 100, entry_type: 'debit', description: 'D', created_at: '2026-01-10T10:00:00Z', reference: '' },
+      ]);
+      manager.importEntries(data);
+
       const stmt = await manager.getAccountStatement('acct_1', '2026-01-01', '2026-01-31T23:59:59Z');
       expect(stmt.openingBalance).toBe(0);
       expect(stmt.closingBalance).toBe(100);
@@ -348,8 +312,8 @@ describe('LedgerManager', () => {
 
   describe('getTrialBalance', () => {
     it('should compute trial balance across accounts', async () => {
-      // acct_1: 300 debits, 0 credits → debit balance of 300
-      // acct_2: 0 debits, 300 credits → credit balance of 300
+      // acct_1: 300 debits, 0 credits -> debit balance of 300
+      // acct_2: 0 debits, 300 credits -> credit balance of 300
       await manager.createBalancedEntry({
         debit: { accountId: 'acct_1', amount: 200, entryType: 'debit', description: 'D1' },
         credit: { accountId: 'acct_2', amount: 200, entryType: 'credit', description: 'C1' },
@@ -373,10 +337,11 @@ describe('LedgerManager', () => {
     });
 
     it('should report balanced as false when imbalanced', async () => {
-      // Manually create imbalanced data
-      session._ledgerStore.push(
-        { account_id: 'acct_1', amount: 100, entry_type: 'debit', description: 'D', created_at: '2026-01-10T10:00:00Z', id: 'l_1' },
-      );
+      // Manually import a single debit entry (no matching credit)
+      manager.importEntries(JSON.stringify([
+        { account_id: 'acct_1', amount: 100, entry_type: 'debit', description: 'D', created_at: '2026-01-10T10:00:00Z' },
+      ]));
+
       const tb = await manager.getTrialBalance(['acct_1']);
       expect(tb.balanced).toBe(false);
       expect(tb.totalDebits).toBe(100);
@@ -421,6 +386,62 @@ describe('LedgerManager', () => {
       expect(result.count).toBe(0);
       expect(result.format).toBe('json');
       expect(JSON.parse(result.data)).toEqual([]);
+    });
+  });
+
+  describe('transaction linking', () => {
+    it('should link entries to a Payload transaction ID', async () => {
+      const result = await manager.createTransactionEntry('txn_abc123', {
+        debit: { accountId: 'acct_1', amount: 500, entryType: 'debit', description: 'Payment received' },
+        credit: { accountId: 'acct_2', amount: 500, entryType: 'credit', description: 'Revenue recorded' },
+      });
+
+      expect(result.debit.transactionId).toBe('txn_abc123');
+      expect(result.credit.transactionId).toBe('txn_abc123');
+
+      const txEntries = await manager.getTransactionEntries('txn_abc123');
+      expect(txEntries).toHaveLength(2);
+    });
+  });
+
+  describe('clear and import', () => {
+    it('should clear all entries', async () => {
+      await manager.createBalancedEntry({
+        debit: { accountId: 'acct_1', amount: 100, entryType: 'debit', description: 'D' },
+        credit: { accountId: 'acct_2', amount: 100, entryType: 'credit', description: 'C' },
+      });
+
+      expect(manager.getAllEntries()).toHaveLength(2);
+      manager.clear();
+      expect(manager.getAllEntries()).toHaveLength(0);
+    });
+
+    it('should import entries from JSON', async () => {
+      const data = JSON.stringify([
+        { account_id: 'acct_1', amount: 100, entry_type: 'debit', description: 'D', created_at: '2026-01-01T00:00:00Z' },
+        { account_id: 'acct_2', amount: 100, entry_type: 'credit', description: 'C', created_at: '2026-01-01T00:00:00Z' },
+      ]);
+
+      const count = manager.importEntries(data);
+      expect(count).toBe(2);
+      expect(manager.getAllEntries()).toHaveLength(2);
+    });
+
+    it('should return all account IDs', async () => {
+      await manager.createBalancedEntry({
+        debit: { accountId: 'acct_1', amount: 100, entryType: 'debit', description: 'D' },
+        credit: { accountId: 'acct_2', amount: 100, entryType: 'credit', description: 'C' },
+      });
+      await manager.createBalancedEntry({
+        debit: { accountId: 'acct_3', amount: 50, entryType: 'debit', description: 'D' },
+        credit: { accountId: 'acct_1', amount: 50, entryType: 'credit', description: 'C' },
+      });
+
+      const ids = manager.getAccountIds();
+      expect(ids).toContain('acct_1');
+      expect(ids).toContain('acct_2');
+      expect(ids).toContain('acct_3');
+      expect(ids).toHaveLength(3);
     });
   });
 });

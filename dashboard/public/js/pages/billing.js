@@ -25,11 +25,16 @@ export async function billingPage(el) {
           <h2>Billing</h2>
           <button class="btn btn-primary" id="btn-new">+ New Schedule</button>
         </div>
+        <p style="margin-bottom:12px;color:var(--c-text-secondary);font-size:12px">
+          Billing schedules automate recurring charges. Each schedule generates BillingCharge records on the defined frequency.
+        </p>
         <div class="tabs">
           <button class="tab ${activeTab === 'schedules' ? 'active' : ''}" data-tab="schedules">Schedules</button>
           <button class="tab ${activeTab === 'charges' ? 'active' : ''}" data-tab="charges">Charges</button>
         </div>
-        <div id="table-area"></div>
+        <div id="table-area">
+          <div class="empty-state"><p>Loading...</p></div>
+        </div>
       </div>`;
   }
 
@@ -38,7 +43,7 @@ export async function billingPage(el) {
     area.innerHTML = '<div class="empty-state"><p>Loading...</p></div>';
     try {
       if (activeTab === 'schedules') {
-        const items = await api.list('billing-schedules', { limit: 100, orderBy: '-created_at' });
+        const items = await api.list('billing-schedules', { limit: 20, orderBy: '-created_at' });
         area.innerHTML = dataTable(
           [
             { key: 'id', label: 'ID', render: v => `<code>${v}</code>` },
@@ -57,7 +62,7 @@ export async function billingPage(el) {
           ]
         );
       } else {
-        const items = await api.list('billing-charges', { limit: 100, orderBy: '-created_at' });
+        const items = await api.list('billing-charges', { limit: 20, orderBy: '-created_at' });
         area.innerHTML = dataTable(
           [
             { key: 'id', label: 'ID', render: v => `<code>${v}</code>` },
@@ -72,7 +77,7 @@ export async function billingPage(el) {
         );
       }
     } catch (e) {
-      area.innerHTML = `<p style="color:var(--c-danger)">${e.error || e.message}</p>`;
+      area.innerHTML = `<div class="empty-state"><p style="color:var(--c-danger)">Failed to load: ${e.error || e.message}</p></div>`;
     }
   }
 

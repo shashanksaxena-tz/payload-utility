@@ -32,7 +32,7 @@ function initSession(apiKey, apiUrl) {
 // Attempt initial load from env
 try {
   if (process.env.PAYLOAD_API_KEY) {
-    initSession(process.env.PAYLOAD_API_KEY, process.env.PAYLOAD_API_URL);
+    initSession(process.env.PAYLOAD_API_KEY.trim(), process.env.PAYLOAD_API_URL ? process.env.PAYLOAD_API_URL.trim() : undefined);
   }
 } catch (e) {
   console.warn('SDK not loaded yet — build the parent project first or set env vars.', e.message);
@@ -138,6 +138,7 @@ Object.entries(MODEL_MAP).forEach(([resource, modelName]) => {
       const items = await query.all();
       res.json(items.map(modelData));
     } catch (e) {
+      console.error(`Error in GET /api/${resource}:`, e.message, e.details);
       res.status(e.statusCode || 500).json({ error: e.message, details: e.details });
     }
   });
@@ -148,6 +149,7 @@ Object.entries(MODEL_MAP).forEach(([resource, modelName]) => {
       const item = await sdk.session[modelName].get(req.params.id);
       res.json(modelData(item));
     } catch (e) {
+      console.error(`Error in GET /api/${resource}/${req.params.id}:`, e.message, e.details);
       res.status(e.statusCode || 500).json({ error: e.message, details: e.details });
     }
   });
@@ -155,6 +157,7 @@ Object.entries(MODEL_MAP).forEach(([resource, modelName]) => {
   // CREATE  POST /api/{resource}
   router.post('/', async (req, res) => {
     try {
+      console.log(`[DEBUG] POST /api/${resource} Body:`, JSON.stringify(req.body));
       const item = await sdk.session[modelName].create(req.body);
       res.status(201).json(modelData(item));
     } catch (e) {

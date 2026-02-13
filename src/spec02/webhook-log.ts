@@ -1,10 +1,13 @@
 import { Model, ModelSpec } from '../core/model';
 
 /**
- * WebhookLog - Log entry for a webhook delivery attempt.
+ * WebhookLog - Log entry for a webhook delivery attempt (v2).
  *
  * Records the details of each webhook notification delivery,
- * including response status, timing, and retry information.
+ * including response status, timing, and trigger information.
+ *
+ * V2 object: webhook_log
+ * V2 endpoint: /webhook_logs
  */
 export class WebhookLog extends Model {
   static spec: ModelSpec = {
@@ -13,13 +16,12 @@ export class WebhookLog extends Model {
   };
 
   get webhookId(): string { return this.getStr('webhook_id'); }
-  get eventType(): string { return this.getStr('event_type'); }
+  get trigger(): string { return this.getStr('trigger'); }
   get url(): string { return this.getStr('url'); }
-  get requestBody(): string { return this.getStr('request_body'); }
-  get responseStatus(): number { return this.getInt('response_status'); }
-  get responseBody(): string { return this.getStr('response_body'); }
-  get success(): boolean { return this.getBool('success'); }
-  get attemptNumber(): number { return this.getInt('attempt_number'); }
-  get deliveredAt(): string { return this.getStr('delivered_at'); }
+  get httpStatus(): number { return this.getInt('http_status'); }
+  get oauthStatus(): number { return this.getInt('oauth_status'); }
+  get triggeredOn(): Record<string, unknown> { return (this.get('triggered_on') as Record<string, unknown>) || {}; }
+  get attrs(): Record<string, unknown> { return (this.get('attrs') as Record<string, unknown>) || {}; }
   get createdAt(): string { return this.getStr('created_at'); }
+  get modifiedAt(): string { return this.getStr('modified_at'); }
 }

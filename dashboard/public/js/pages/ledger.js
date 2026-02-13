@@ -40,6 +40,10 @@ export async function ledgerPage(el) {
             <button class="btn btn-outline" id="btn-reversal">+ Reversal</button>
           </div>
         </div>
+        <p style="margin-bottom:12px;color:var(--c-text-secondary);font-size:12px">
+          Full double-entry bookkeeping system. Every entry must balance (total debits = total credits).
+          Use the tabs below for entry management, reporting, and reconciliation.
+        </p>
         <div class="tabs" style="flex-wrap:wrap">
           <button class="tab ${activeTab === 'entries' ? 'active' : ''}" data-tab="entries">All Entries</button>
           <button class="tab ${activeTab === 'balance' ? 'active' : ''}" data-tab="balance">Account Balance</button>
@@ -62,7 +66,7 @@ export async function ledgerPage(el) {
 
     if (activeTab === 'entries') {
       try {
-        const items = await api.list('ledger-entries', { limit: 100, orderBy: '-created_at' });
+        const items = await api.list('ledger-entries', { limit: 20, orderBy: '-created_at' });
         area.innerHTML = dataTable(
           [
             { key: 'id', label: 'ID', render: v => `<code>${(v||'').slice(0,12)}</code>` },

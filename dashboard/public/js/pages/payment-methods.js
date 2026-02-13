@@ -31,11 +31,17 @@ export async function paymentMethodsPage(el) {
             <button class="btn btn-outline" id="btn-new-bank">+ Bank Account</button>
           </div>
         </div>
+        <p style="margin-bottom:12px;color:var(--c-text-secondary);font-size:12px">
+          Payment methods (Cards and Bank Accounts) are polymorphic subtypes sharing the
+          <code>/payment_methods</code> endpoint. Use test card <code>4242424242424242</code> in sandbox.
+        </p>
         <div class="tabs" id="pm-tabs">
           <button class="tab ${activeTab === 'cards' ? 'active' : ''}" data-tab="cards">Cards</button>
           <button class="tab ${activeTab === 'bank-accounts' ? 'active' : ''}" data-tab="bank-accounts">Bank Accounts</button>
         </div>
-        <div id="table-area"></div>
+        <div id="table-area">
+          <div class="empty-state"><p>Loading...</p></div>
+        </div>
       </div>`;
   }
 
@@ -43,7 +49,7 @@ export async function paymentMethodsPage(el) {
     const area = document.getElementById('table-area');
     area.innerHTML = '<div class="empty-state"><p>Loading...</p></div>';
     try {
-      const items = await api.list(activeTab, { limit: 100 });
+      const items = await api.list(activeTab, { limit: 20 });
       const cols = activeTab === 'cards'
         ? [
             { key: 'id', label: 'ID', render: v => `<code>${v}</code>` },
@@ -63,7 +69,7 @@ export async function paymentMethodsPage(el) {
         { name: 'delete', label: 'Delete', cls: 'btn-danger btn-sm' },
       ]);
     } catch (e) {
-      area.innerHTML = `<p style="color:var(--c-danger)">${e.error || e.message}</p>`;
+      area.innerHTML = `<div class="empty-state"><p style="color:var(--c-danger)">Failed to load: ${e.error || e.message}</p></div>`;
     }
   }
 

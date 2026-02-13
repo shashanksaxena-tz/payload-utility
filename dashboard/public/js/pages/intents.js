@@ -15,16 +15,20 @@ export async function intentsPage(el) {
         <h2>Payment Intents</h2>
         <button class="btn btn-primary" id="btn-new">+ New Intent</button>
       </div>
-      <p style="margin-bottom:16px;color:var(--c-text-secondary)">
-        Payment intents represent the intent to collect a payment. The <code>client_secret</code> is passed to the frontend JS SDK to confirm payment.
+      <p style="margin-bottom:16px;color:var(--c-text-secondary);font-size:12px">
+        Payment intents represent the intent to collect a payment. The <code>client_secret</code> is passed
+        to the frontend JS SDK to confirm payment on the client side. This is used for SCA-compliant flows.
       </p>
-      <div id="table-area"></div>
+      <div id="table-area">
+        <div class="empty-state"><p>Loading...</p></div>
+      </div>
     </div>`;
 
   async function load() {
     const area = document.getElementById('table-area');
+    area.innerHTML = '<div class="empty-state"><p>Loading...</p></div>';
     try {
-      const items = await api.list('intents', { limit: 100, orderBy: '-created_at' });
+      const items = await api.list('intents', { limit: 20, orderBy: '-created_at' });
       area.innerHTML = dataTable(
         [
           { key: 'id', label: 'ID', render: v => `<code>${v}</code>` },
@@ -42,7 +46,7 @@ export async function intentsPage(el) {
         ]
       );
     } catch (e) {
-      area.innerHTML = `<p style="color:var(--c-danger)">${e.error || e.message}</p>`;
+      area.innerHTML = `<div class="empty-state"><p style="color:var(--c-danger)">Failed to load: ${e.error || e.message}</p></div>`;
     }
   }
 
@@ -73,7 +77,7 @@ export async function intentsPage(el) {
       `<div class="form-actions"><button class="btn btn-primary" id="btn-save">Create Intent</button></div>`);
     document.getElementById('btn-save').onclick = async () => {
       try {
-        const item = await api.create('intents', readForm(FIELDS));
+        await api.create('intents', readForm(FIELDS));
         toast('Intent created', 'success');
         closeModal();
         await load();

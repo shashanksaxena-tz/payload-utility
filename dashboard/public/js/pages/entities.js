@@ -64,13 +64,19 @@ export async function entitiesPage(el) {
             <button class="btn btn-outline" id="btn-new-profile">+ Profile</button>
           </div>
         </div>
+        <p style="margin-bottom:12px;color:var(--c-text-secondary);font-size:12px">
+          Entities represent businesses being onboarded onto the platform. Stakeholders, processing accounts,
+          agreements, and profiles support the KYB/KYC verification process.
+        </p>
         <div class="tabs">
           <button class="tab ${activeTab === 'entities' ? 'active' : ''}" data-tab="entities">Entities</button>
           <button class="tab ${activeTab === 'stakeholders' ? 'active' : ''}" data-tab="stakeholders">Stakeholders</button>
           <button class="tab ${activeTab === 'processing' ? 'active' : ''}" data-tab="processing">Processing</button>
           <button class="tab ${activeTab === 'profiles' ? 'active' : ''}" data-tab="profiles">Profiles</button>
         </div>
-        <div id="table-area"></div>
+        <div id="table-area">
+          <div class="empty-state"><p>Loading...</p></div>
+        </div>
       </div>`;
   }
 
@@ -79,7 +85,7 @@ export async function entitiesPage(el) {
     area.innerHTML = '<div class="empty-state"><p>Loading...</p></div>';
     try {
       if (activeTab === 'entities') {
-        const items = await api.list('entities', { limit: 100 });
+        const items = await api.list('entities', { limit: 20 });
         area.innerHTML = dataTable(
           [
             { key: 'id', label: 'ID', render: v => `<code>${v}</code>` },
@@ -95,7 +101,7 @@ export async function entitiesPage(el) {
           ]
         );
       } else if (activeTab === 'stakeholders') {
-        const items = await api.list('stakeholders', { limit: 100 });
+        const items = await api.list('stakeholders', { limit: 20 });
         area.innerHTML = dataTable(
           [
             { key: 'id', label: 'ID', render: v => `<code>${v}</code>` },
@@ -109,8 +115,8 @@ export async function entitiesPage(el) {
           [{ name: 'view', label: 'View', cls: 'btn-outline' }]
         );
       } else if (activeTab === 'processing') {
-        const accts = await api.list('processing-accounts', { limit: 100 });
-        const agreements = await api.list('processing-agreements', { limit: 100 });
+        const accts = await api.list('processing-accounts', { limit: 20 }).catch(() => []);
+        const agreements = await api.list('processing-agreements', { limit: 20 }).catch(() => []);
         area.innerHTML = '<h3 style="margin-bottom:12px">Processing Accounts</h3>' +
           dataTable(
             [
@@ -134,7 +140,7 @@ export async function entitiesPage(el) {
             agreements, [{ name: 'view', label: 'View', cls: 'btn-outline' }]
           );
       } else {
-        const items = await api.list('profiles', { limit: 100 });
+        const items = await api.list('profiles', { limit: 20 });
         area.innerHTML = dataTable(
           [
             { key: 'id', label: 'ID', render: v => `<code>${v}</code>` },
@@ -147,7 +153,7 @@ export async function entitiesPage(el) {
         );
       }
     } catch (e) {
-      area.innerHTML = `<p style="color:var(--c-danger)">${e.error || e.message}</p>`;
+      area.innerHTML = `<div class="empty-state"><p style="color:var(--c-danger)">Failed to load: ${e.error || e.message}</p></div>`;
     }
   }
 

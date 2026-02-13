@@ -95,15 +95,26 @@ export class Request {
     this.options = options;
   }
 
-  private buildHeaders(requestId: string): Record<string, string> {
-    const authToken = Buffer.from(`${this.options.apiKey}:`).toString('base64');
+  private buildHeaders(requestId: string, method: string): Record<string, string> {
+    // Support both Basic Auth (api key) and Bearer token auth
+    let authorization: string;
+    if (this.options.apiKey.startsWith('bearer_')) {
+      authorization = `Bearer ${this.options.apiKey.slice(7)}`;
+    } else {
+      const authToken = Buffer.from(`${this.options.apiKey}:`).toString('base64');
+      authorization = `Basic ${authToken}`;
+    }
+
     const headers: Record<string, string> = {
-      'Authorization': `Basic ${authToken}`,
-      'Content-Type': 'application/json',
+      'Authorization': authorization,
       'Accept': 'application/json',
       'X-Request-Id': requestId,
       'User-Agent': 'payload-utility/1.0.0',
     };
+
+    if (method === 'POST' || method === 'PUT') {
+      headers['Content-Type'] = 'application/json';
+    }
 
     if (this.options.apiVersion) {
       headers['X-API-Version'] = this.options.apiVersion;
@@ -149,7 +160,7 @@ export class Request {
   async execute<T = Record<string, unknown>>(config: RequestConfig): Promise<ApiResponse<T>> {
     const requestId = generateRequestId();
     const url = this.buildRequestUrl(config);
-    const headers = this.buildHeaders(requestId);
+    const headers = this.buildHeaders(requestId, config.method);
 
     let bodyStr: string | undefined;
     if (config.body && (config.method === 'POST' || config.method === 'PUT')) {

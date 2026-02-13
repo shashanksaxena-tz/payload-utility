@@ -28,18 +28,15 @@ describe('Spec02 - Advanced Objects', () => {
 
     it('should expose properties', () => {
       const bs = new BillingSchedule({
-        customer_id: 'cust_1',
-        amount: 29.99,
-        frequency: 'monthly',
-        interval: 1,
         status: 'active',
         start_date: '2024-01-01',
+        description: 'Monthly subscription',
+        type: 'recurring',
       });
-      expect(bs.customerId).toBe('cust_1');
-      expect(bs.amount).toBe(29.99);
-      expect(bs.frequency).toBe('monthly');
-      expect(bs.interval).toBe(1);
       expect(bs.status).toBe('active');
+      expect(bs.startDate).toBe('2024-01-01');
+      expect(bs.description).toBe('Monthly subscription');
+      expect(bs.type).toBe('recurring');
     });
   });
 
@@ -51,14 +48,16 @@ describe('Spec02 - Advanced Objects', () => {
 
     it('should expose properties', () => {
       const bc = new BillingCharge({
-        billing_schedule_id: 'bs_1',
+        billing_schedule_id: 'bscd_1',
         amount: 29.99,
-        status: 'completed',
-        attempt_count: 1,
+        description: 'Monthly charge',
+        qty: 1,
+        total: 29.99,
       });
-      expect(bc.billingScheduleId).toBe('bs_1');
+      expect(bc.billingScheduleId).toBe('bscd_1');
       expect(bc.amount).toBe(29.99);
-      expect(bc.attemptCount).toBe(1);
+      expect(bc.qty).toBe(1);
+      expect(bc.total).toBe(29.99);
     });
   });
 
@@ -70,38 +69,35 @@ describe('Spec02 - Advanced Objects', () => {
 
     it('should expose properties', () => {
       const inv = new Invoice({
-        customer_id: 'cust_1',
         number: 'INV-001',
-        total_amount: 250.00,
-        amount_due: 250.00,
-        amount_paid: 0,
-        currency: 'USD',
         status: 'draft',
+        due_date: '2024-04-01',
+        description: 'Test invoice',
       });
-      expect(inv.customerId).toBe('cust_1');
       expect(inv.number).toBe('INV-001');
-      expect(inv.totalAmount).toBe(250.00);
-      expect(inv.amountDue).toBe(250.00);
-      expect(inv.currency).toBe('USD');
+      expect(inv.status).toBe('draft');
+      expect(inv.dueDate).toBe('2024-04-01');
     });
   });
 
   describe('InvoiceItem', () => {
     it('should have correct spec', () => {
-      expect(InvoiceItem.getMergedSpec().object).toBe('invoice_item');
+      expect(InvoiceItem.getMergedSpec().object).toBe('line_item');
+      expect(InvoiceItem.getEndpoint()).toBe('/line_items');
     });
 
     it('should expose properties', () => {
       const item = new InvoiceItem({
         invoice_id: 'inv_1',
         description: 'Consulting',
-        quantity: 5,
-        unit_price: 50.00,
         amount: 250.00,
+        entry_type: 'charge',
+        qty: 5,
       });
       expect(item.invoiceId).toBe('inv_1');
-      expect(item.quantity).toBe(5);
-      expect(item.unitPrice).toBe(50.00);
+      expect(item.amount).toBe(250.00);
+      expect(item.entryType).toBe('charge');
+      expect(item.qty).toBe(5);
     });
   });
 
@@ -137,117 +133,150 @@ describe('Spec02 - Advanced Objects', () => {
     it('should expose properties', () => {
       const wh = new Webhook({
         url: 'https://example.com/hook',
-        events: ['payment.created', 'payment.updated'],
-        status: 'active',
+        trigger: 'payment',
       });
       expect(wh.url).toBe('https://example.com/hook');
-      expect(wh.events).toEqual(['payment.created', 'payment.updated']);
-      expect(wh.status).toBe('active');
+      expect(wh.trigger).toBe('payment');
     });
   });
 
   describe('WebhookLog', () => {
     it('should have correct spec', () => {
       expect(WebhookLog.getMergedSpec().object).toBe('webhook_log');
+      expect(WebhookLog.getEndpoint()).toBe('/webhook_logs');
     });
 
     it('should expose properties', () => {
       const log = new WebhookLog({
         webhook_id: 'wh_1',
-        event_type: 'payment.created',
-        response_status: 200,
-        success: true,
-        attempt_number: 1,
+        trigger: 'payment',
+        http_status: 200,
+        url: 'https://example.com/hook',
       });
       expect(log.webhookId).toBe('wh_1');
-      expect(log.responseStatus).toBe(200);
-      expect(log.success).toBe(true);
+      expect(log.trigger).toBe('payment');
+      expect(log.httpStatus).toBe(200);
     });
   });
 
-  describe('Entity', () => {
+  describe('Entity (LegalEntity)', () => {
     it('should have correct spec', () => {
-      expect(Entity.getMergedSpec().object).toBe('entity');
-      expect(Entity.getEndpoint()).toBe('/entities');
+      expect(Entity.getMergedSpec().object).toBe('legal_entity');
+      expect(Entity.getEndpoint()).toBe('/legal_entities');
     });
 
     it('should expose properties', () => {
       const entity = new Entity({
         legal_name: 'Acme Corp',
-        dba_name: 'Acme',
-        entity_type: 'llc',
-        ein: '12-3456789',
+        type: 'llc',
+        ein: '123456789',
+        city: 'San Francisco',
+        state_province: 'CA',
+        phone_number: '555-1234',
       });
       expect(entity.legalName).toBe('Acme Corp');
-      expect(entity.dbaName).toBe('Acme');
-      expect(entity.entityType).toBe('llc');
-      expect(entity.ein).toBe('12-3456789');
+      expect(entity.type).toBe('llc');
+      expect(entity.ein).toBe('123456789');
+      expect(entity.city).toBe('San Francisco');
+      expect(entity.phoneNumber).toBe('555-1234');
     });
   });
 
-  describe('Stakeholder', () => {
+  describe('Stakeholder (LegalEntityOwner)', () => {
     it('should have correct spec', () => {
-      expect(Stakeholder.getMergedSpec().object).toBe('stakeholder');
+      expect(Stakeholder.getMergedSpec().object).toBe('legal_entity_owner');
+      expect(Stakeholder.getEndpoint()).toBe('/legal_entity_owners');
     });
 
     it('should expose properties', () => {
       const sh = new Stakeholder({
-        entity_id: 'ent_1',
+        legal_entity_id: 'le_1',
         first_name: 'John',
         last_name: 'Doe',
-        ownership_percentage: 51.0,
+        ownership: 51.0,
         title: 'CEO',
       });
-      expect(sh.entityId).toBe('ent_1');
+      expect(sh.legalEntityId).toBe('le_1');
       expect(sh.firstName).toBe('John');
-      expect(sh.ownershipPercentage).toBe(51.0);
+      expect(sh.ownership).toBe(51.0);
     });
   });
 
   describe('Transfer', () => {
     it('should have correct spec', () => {
-      expect(Transfer.getMergedSpec().object).toBe('transfer');
-      expect(Transfer.getEndpoint()).toBe('/transfers');
+      expect(Transfer.getMergedSpec().object).toBe('transaction');
+      expect(Transfer.getEndpoint()).toBe('/transactions');
+      expect(Transfer.getMergedSpec().polymorphic).toEqual({ type: 'transfer' });
     });
 
     it('should expose properties', () => {
       const transfer = new Transfer({
         amount: 500.00,
-        source_account_id: 'acct_1',
-        destination_account_id: 'acct_2',
+        sender_id: 'acct_1',
+        receiver_id: 'acct_2',
         status: 'completed',
       });
       expect(transfer.amount).toBe(500.00);
-      expect(transfer.sourceAccountId).toBe('acct_1');
-      expect(transfer.destinationAccountId).toBe('acct_2');
+      expect(transfer.senderId).toBe('acct_1');
+      expect(transfer.receiverId).toBe('acct_2');
     });
   });
 
   describe('ProcessingAccount', () => {
     it('should have correct spec', () => {
       expect(ProcessingAccount.getMergedSpec().object).toBe('processing_account');
+      expect(ProcessingAccount.getEndpoint()).toBe('/processing_accounts');
+    });
+
+    it('should expose properties', () => {
+      const pa = new ProcessingAccount({
+        name: 'Main Processing',
+        status: 'active',
+        legal_entity_id: 'le_1',
+        industry: 'technology',
+      });
+      expect(pa.name).toBe('Main Processing');
+      expect(pa.status).toBe('active');
+      expect(pa.legalEntityId).toBe('le_1');
     });
   });
 
-  describe('ProcessingAgreement', () => {
+  describe('ProcessingAgreement (Operation)', () => {
     it('should have correct spec', () => {
-      expect(ProcessingAgreement.getMergedSpec().object).toBe('processing_agreement');
+      expect(ProcessingAgreement.getMergedSpec().object).toBe('operation');
+      expect(ProcessingAgreement.getEndpoint()).toBe('/operations');
+    });
+
+    it('should expose properties', () => {
+      const op = new ProcessingAgreement({
+        amount: 100,
+        status: 'complete',
+        type: 'process',
+        transaction_id: 'txn_1',
+      });
+      expect(op.amount).toBe(100);
+      expect(op.status).toBe('complete');
+      expect(op.type).toBe('process');
+      expect(op.transactionId).toBe('txn_1');
     });
   });
 
   describe('PaymentLink', () => {
     it('should have correct spec', () => {
       expect(PaymentLink.getMergedSpec().object).toBe('payment_link');
+      expect(PaymentLink.getEndpoint()).toBe('/payment_links');
     });
 
     it('should expose properties', () => {
       const link = new PaymentLink({
-        url: 'https://pay.payload.co/link_1',
+        url: 'https://pay.payload.com/link_1',
         amount: 100,
         description: 'Test payment',
+        status: 'active',
       });
-      expect(link.url).toBe('https://pay.payload.co/link_1');
+      expect(link.url).toBe('https://pay.payload.com/link_1');
       expect(link.amount).toBe(100);
+      expect(link.status).toBe('active');
     });
   });
 
@@ -259,15 +288,13 @@ describe('Spec02 - Advanced Objects', () => {
 
     it('should expose properties', () => {
       const intent = new Intent({
-        amount: 200,
-        currency: 'USD',
-        status: 'requires_payment_method',
-        client_secret: 'cs_test_123',
-        metadata: { order_id: 'ord_1' },
+        status: 'pending',
+        type: 'checkout_page',
+        client_token_id: 'ct_test_123',
       });
-      expect(intent.amount).toBe(200);
-      expect(intent.clientSecret).toBe('cs_test_123');
-      expect(intent.metadata).toEqual({ order_id: 'ord_1' });
+      expect(intent.status).toBe('pending');
+      expect(intent.type).toBe('checkout_page');
+      expect(intent.clientTokenId).toBe('ct_test_123');
     });
   });
 
@@ -304,9 +331,20 @@ describe('Spec02 - Advanced Objects', () => {
   });
 
   describe('Org', () => {
-    it('should have correct spec with custom endpoint', () => {
+    it('should have correct spec', () => {
       expect(Org.getMergedSpec().object).toBe('org');
-      expect(Org.getEndpoint()).toBe('/accounts/orgs');
+      expect(Org.getEndpoint()).toBe('/orgs');
+    });
+
+    it('should expose properties', () => {
+      const org = new Org({
+        name: 'Acme Corp',
+        org_type: 'platform',
+        industry: 'technology',
+      });
+      expect(org.name).toBe('Acme Corp');
+      expect(org.orgType).toBe('platform');
+      expect(org.industry).toBe('technology');
     });
   });
 });

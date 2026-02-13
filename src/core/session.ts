@@ -16,6 +16,8 @@ import { Payment } from '../spec01/payment';
 import { Refund } from '../spec01/refund';
 import { Credit } from '../spec01/credit';
 import { Deposit } from '../spec01/deposit';
+import { Withdraw } from '../spec01/withdraw';
+import { Payout } from '../spec01/payout';
 import { PaymentMethod } from '../spec01/payment-method';
 import { Card } from '../spec01/card';
 import { BankAccount } from '../spec01/bank-account';
@@ -47,7 +49,7 @@ export interface SessionConfig {
   timeout?: number;
 }
 
-const DEFAULT_API_URL = 'https://api.payload.co';
+const DEFAULT_API_URL = 'https://api.payload.com';
 const DEFAULT_TIMEOUT = 30000;
 
 export class Session {
@@ -62,6 +64,8 @@ export class Session {
   public readonly Refund: ModelOperations<Refund>;
   public readonly Credit: ModelOperations<Credit>;
   public readonly Deposit: ModelOperations<Deposit>;
+  public readonly Withdraw: ModelOperations<Withdraw>;
+  public readonly Payout: ModelOperations<Payout>;
   public readonly PaymentMethod: ModelOperations<PaymentMethod>;
   public readonly Card: ModelOperations<Card>;
   public readonly BankAccount: ModelOperations<BankAccount>;
@@ -107,7 +111,7 @@ export class Session {
     const requestOptions: RequestOptions = {
       apiUrl: config.apiUrl || DEFAULT_API_URL,
       apiKey: this.apiKey,
-      apiVersion: config.apiVersion,
+      apiVersion: config.apiVersion || 'v2.0',
       timeout: config.timeout || DEFAULT_TIMEOUT,
     };
 
@@ -120,6 +124,8 @@ export class Session {
     this.Refund = this.createOps(Refund);
     this.Credit = this.createOps(Credit);
     this.Deposit = this.createOps(Deposit);
+    this.Withdraw = this.createOps(Withdraw);
+    this.Payout = this.createOps(Payout);
     this.PaymentMethod = this.createOps(PaymentMethod);
     this.Card = this.createOps(Card);
     this.BankAccount = this.createOps(BankAccount);

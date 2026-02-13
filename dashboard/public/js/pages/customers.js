@@ -19,8 +19,14 @@ export async function customersPage(el) {
         <h2>Customers</h2>
         <button class="btn btn-primary" id="btn-new">+ New Customer</button>
       </div>
+      <p style="margin-bottom:12px;color:var(--c-text-secondary);font-size:12px">
+        In Payload V2, customers are Account objects with <code>type=customer</code>.
+        This page manages customer accounts.
+      </p>
       <div id="filter-area"></div>
-      <div id="table-area"></div>
+      <div id="table-area">
+        <div class="empty-state"><p>Loading customers...</p></div>
+      </div>
       <div id="pagination-area"></div>
     </div>`;
 
@@ -37,6 +43,7 @@ export async function customersPage(el) {
   async function load() {
     const area = document.getElementById('table-area');
     const pgArea = document.getElementById('pagination-area');
+    area.innerHTML = '<div class="empty-state"><p>Loading...</p></div>';
     try {
       const params = { limit: PAGE_SIZE, offset: currentPage * PAGE_SIZE, orderBy: '-created_at' };
       if (currentFilter) {
@@ -63,7 +70,8 @@ export async function customersPage(el) {
         load();
       });
     } catch (e) {
-      area.innerHTML = `<p style="color:var(--c-danger)">${e.error || e.message}</p>`;
+      area.innerHTML = `<div class="empty-state"><p style="color:var(--c-danger)">Failed to load customers: ${e.error || e.message}</p>
+        <p style="margin-top:8px"><button class="btn btn-outline btn-sm" onclick="location.reload()">Retry</button></p></div>`;
       pgArea.innerHTML = '';
     }
   }

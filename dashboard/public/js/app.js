@@ -19,6 +19,8 @@ import { ledgerPage }         from './pages/ledger.js';
 import { settingsPage }       from './pages/settings.js';
 import { intentsPage }        from './pages/intents.js';
 import { accountsPage }       from './pages/accounts.js';
+import { reportsPage }        from './pages/reports.js';
+import { simulatePage }       from './pages/simulate.js';
 
 /* ---- Page registry ---- */
 const PAGES = {
@@ -35,6 +37,8 @@ const PAGES = {
   transfers:        { title: 'Transfers',         icon: '&#8644;',  page: transfersPage },
   accounts:         { title: 'Accounts',          icon: '&#9733;',  page: accountsPage },
   ledger:           { title: 'Ledger',            icon: '&#128218;',page: ledgerPage },
+  reports:          { title: 'Reports',           icon: '&#128202;',page: reportsPage },
+  simulate:         { title: 'Simulate',          icon: '&#9654;',  page: simulatePage },
   settings:         { title: 'Settings',          icon: '&#9881;',  page: settingsPage },
 };
 

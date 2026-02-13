@@ -8,7 +8,8 @@ services:
     ports:
       - "${DASHBOARD_PORT:-3000}:3000"
     environment:
-      - PAYLOAD_API_KEY=${PAYLOAD_API_KEY:-}
-      - PAYLOAD_API_URL=${PAYLOAD_API_URL:-https://api.payload.co}
+      # Connects directly to Payload Sandbox or Production
+      - PAYLOAD_API_KEY=${PAYLOAD_API_KEY}
+      - PAYLOAD_API_URL=${PAYLOAD_API_URL:-https://api.sandbox.payload.co}
       - DASHBOARD_PORT=3000
     restart: unless-stopped

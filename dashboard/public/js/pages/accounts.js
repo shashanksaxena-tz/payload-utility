@@ -1,5 +1,7 @@
 import { api } from '../api.js';
-import { toast, dataTable, buildForm, readForm, openModal, closeModal, kvDetail, badge } from '../components.js';
+import { toast, dataTable, buildForm, readForm, openModal, closeModal, kvDetail, badge, filterBar, paginationBar } from '../components.js';
+
+const PAGE_SIZE = 25;
 
 export async function accountsPage(el) {
   let activeTab = 'accounts';
@@ -8,40 +10,78 @@ export async function accountsPage(el) {
     el.innerHTML = `
       <div class="card">
         <div class="card-header">
-          <h2>Accounts & Access Tokens</h2>
+          <h2>Accounts & Access</h2>
           <div class="btn-group">
             <button class="btn btn-primary" id="btn-new-token">+ New Client Token</button>
             <button class="btn btn-outline" id="btn-new-org">+ New Org</button>
           </div>
         </div>
+        <p style="margin-bottom:16px;color:var(--c-text-secondary);font-size:13px">
+          In Payload V2, Accounts are the core identity object. Customers are Accounts with
+          <code>type=customer</code>. This page shows all account types.
+        </p>
         <div class="tabs">
-          <button class="tab ${activeTab === 'accounts' ? 'active' : ''}" data-tab="accounts">Accounts</button>
+          <button class="tab ${activeTab === 'accounts' ? 'active' : ''}" data-tab="accounts">All Accounts</button>
           <button class="tab ${activeTab === 'tokens' ? 'active' : ''}" data-tab="tokens">Client Tokens</button>
           <button class="tab ${activeTab === 'orgs' ? 'active' : ''}" data-tab="orgs">Organizations</button>
         </div>
+        <div id="filter-area"></div>
         <div id="table-area"></div>
+        <div id="pagination-area"></div>
       </div>`;
   }
 
+  let currentFilter = null;
+  let currentPage = 0;
+
   async function loadTab() {
     const area = document.getElementById('table-area');
+    const pgArea = document.getElementById('pagination-area');
+    const filterArea = document.getElementById('filter-area');
     area.innerHTML = '<div class="empty-state"><p>Loading...</p></div>';
+    if (pgArea) pgArea.innerHTML = '';
+
     try {
       if (activeTab === 'accounts') {
-        const items = await api.list('accounts', { limit: 100 });
+        // Show filter bar for accounts
+        filterArea.innerHTML = filterBar(
+          [
+            { key: 'name', label: 'Name' },
+            { key: 'email', label: 'Email' },
+            { key: 'type', label: 'Type' },
+            { key: 'status', label: 'Status' },
+          ],
+          (f) => { currentFilter = f; currentPage = 0; loadTab(); }
+        );
+
+        const params = { limit: PAGE_SIZE, offset: currentPage * PAGE_SIZE, orderBy: '-created_at' };
+        if (currentFilter) {
+          params[`filter.${currentFilter.field}.${currentFilter.op}`] = currentFilter.value;
+        }
+        const items = await api.list('accounts', params);
         area.innerHTML = dataTable(
           [
             { key: 'id', label: 'ID', render: v => `<code>${v}</code>` },
             { key: 'name', label: 'Name' },
             { key: 'email', label: 'Email' },
+            { key: 'type', label: 'Type', render: v => v ? badge(v) : '-' },
             { key: 'status', label: 'Status' },
             { key: 'created_at', label: 'Created' },
           ],
           items,
-          [{ name: 'view', label: 'View', cls: 'btn-outline' }]
+          [
+            { name: 'view', label: 'View', cls: 'btn-outline' },
+          ]
         );
+        if (pgArea) {
+          pgArea.innerHTML = paginationBar(currentPage, PAGE_SIZE, items.length, (page) => {
+            currentPage = page;
+            loadTab();
+          });
+        }
       } else if (activeTab === 'tokens') {
-        const items = await api.list('client-tokens', { limit: 100 });
+        filterArea.innerHTML = '';
+        const items = await api.list('client-tokens', { limit: 20 });
         area.innerHTML = dataTable(
           [
             { key: 'id', label: 'ID', render: v => `<code>${v}</code>` },
@@ -57,7 +97,8 @@ export async function accountsPage(el) {
           ]
         );
       } else {
-        const items = await api.list('orgs', { limit: 100 });
+        filterArea.innerHTML = '';
+        const items = await api.list('orgs', { limit: 20 });
         area.innerHTML = dataTable(
           [
             { key: 'id', label: 'ID', render: v => `<code>${v}</code>` },
@@ -74,6 +115,7 @@ export async function accountsPage(el) {
       }
     } catch (e) {
       area.innerHTML = `<p style="color:var(--c-danger)">${e.error || e.message}</p>`;
+      if (pgArea) pgArea.innerHTML = '';
     }
   }
 
@@ -84,6 +126,8 @@ export async function accountsPage(el) {
     const tab = e.target.closest('[data-tab]');
     if (tab) {
       activeTab = tab.dataset.tab;
+      currentFilter = null;
+      currentPage = 0;
       el.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === activeTab));
       await loadTab();
       return;
@@ -115,7 +159,7 @@ export async function accountsPage(el) {
     ]) + `<div class="form-actions"><button class="btn btn-primary" id="btn-save">Create Token</button></div>`);
     document.getElementById('btn-save').onclick = async () => {
       try {
-        const item = await api.create('client-tokens', readForm([{ name: 'type' }]));
+        await api.create('client-tokens', readForm([{ name: 'type' }]));
         toast('Client token created', 'success');
         closeModal();
         activeTab = 'tokens'; render(); await loadTab();

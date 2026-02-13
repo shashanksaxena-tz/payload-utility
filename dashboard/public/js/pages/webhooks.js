@@ -16,11 +16,17 @@ export async function webhooksPage(el) {
           <h2>Webhooks</h2>
           <button class="btn btn-primary" id="btn-new">+ New Webhook</button>
         </div>
+        <p style="margin-bottom:12px;color:var(--c-text-secondary);font-size:12px">
+          Register URLs to receive real-time event notifications (payment.created, refund.created, invoice.paid, etc.).
+          Delivery logs track each attempt and response status.
+        </p>
         <div class="tabs">
           <button class="tab ${activeTab === 'webhooks' ? 'active' : ''}" data-tab="webhooks">Webhooks</button>
           <button class="tab ${activeTab === 'logs' ? 'active' : ''}" data-tab="logs">Delivery Logs</button>
         </div>
-        <div id="table-area"></div>
+        <div id="table-area">
+          <div class="empty-state"><p>Loading...</p></div>
+        </div>
       </div>`;
   }
 
@@ -29,7 +35,7 @@ export async function webhooksPage(el) {
     area.innerHTML = '<div class="empty-state"><p>Loading...</p></div>';
     try {
       if (activeTab === 'webhooks') {
-        const items = await api.list('webhooks', { limit: 100 });
+        const items = await api.list('webhooks', { limit: 20 });
         area.innerHTML = dataTable(
           [
             { key: 'id', label: 'ID', render: v => `<code>${v}</code>` },
@@ -46,7 +52,7 @@ export async function webhooksPage(el) {
           ]
         );
       } else {
-        const items = await api.list('webhook-logs', { limit: 100, orderBy: '-created_at' });
+        const items = await api.list('webhook-logs', { limit: 20, orderBy: '-created_at' });
         area.innerHTML = dataTable(
           [
             { key: 'id', label: 'ID', render: v => `<code>${v}</code>` },
@@ -62,7 +68,7 @@ export async function webhooksPage(el) {
         );
       }
     } catch (e) {
-      area.innerHTML = `<p style="color:var(--c-danger)">${e.error || e.message}</p>`;
+      area.innerHTML = `<div class="empty-state"><p style="color:var(--c-danger)">Failed to load: ${e.error || e.message}</p></div>`;
     }
   }
 

@@ -1,5 +1,5 @@
 /**
- * LedgerManager - Two-way (double-entry) ledger management system.
+ * LedgerManager - Local double-entry ledger management system.
  *
  * Implements double-entry bookkeeping principles where every financial
  * transaction creates balanced debit and credit entries across accounts.
@@ -11,18 +11,16 @@
  * 4. Credit entries increase liability/revenue/equity accounts
  * 5. All entries are immutable - corrections are made via reversing entries
  *
- * This manager works with the Payload Ledger (TransactionLedger) API objects
- * and provides higher-level operations for:
- * - Creating balanced ledger entries
- * - Validating entry pairs
- * - Computing account balances
- * - Generating reconciliation reports
- * - Detecting imbalances
+ * This manager stores all entries in-memory (local) and does NOT depend on
+ * a remote ledger API. Entries can optionally link to real Payload transaction
+ * IDs for reconciliation against real payment data.
+ *
+ * The Session parameter is retained for backward compatibility and for
+ * optional reconciliation against real Payload transactions.
  */
 
 import { Session } from '../core/session';
 import { Ledger } from '../spec02/ledger';
-import { attr, Filter } from '../core/attr';
 
 export interface LedgerEntry {
   accountId: string;
@@ -31,6 +29,7 @@ export interface LedgerEntry {
   description: string;
   reference?: string;
   metadata?: Record<string, unknown>;
+  transactionId?: string;
 }
 
 export interface LedgerPair {
@@ -117,9 +116,55 @@ export interface TrialBalance {
 
 export class LedgerManager {
   private readonly session: Session;
+  private readonly entries: Ledger[] = [];
+  private idCounter = 0;
 
   constructor(session: Session) {
     this.session = session;
+  }
+
+  /**
+   * Create a local ledger entry and store it in memory.
+   * Returns a Ledger model instance.
+   */
+  private createLocalEntry(data: Record<string, unknown>): Ledger {
+    const entry = new Ledger({
+      ...data,
+      id: `ledger_${++this.idCounter}`,
+      created_at: data.created_at || new Date().toISOString(),
+    });
+    this.entries.push(entry);
+    return entry;
+  }
+
+  /**
+   * Query local entries with simple filters.
+   * Supports filtering by account_id and date range.
+   */
+  private queryEntries(filters: Record<string, unknown> = {}): Ledger[] {
+    return this.entries.filter(entry => {
+      for (const [key, value] of Object.entries(filters)) {
+        const entryVal = entry.get(key);
+        if (entryVal !== value) return false;
+      }
+      return true;
+    });
+  }
+
+  /**
+   * Query entries for an account with optional date range.
+   */
+  private queryAccountEntries(
+    accountId: string,
+    startDate?: string,
+    endDate?: string
+  ): Ledger[] {
+    return this.entries.filter(entry => {
+      if (entry.accountId !== accountId) return false;
+      if (startDate && entry.createdAt < startDate) return false;
+      if (endDate && entry.createdAt > endDate) return false;
+      return true;
+    });
   }
 
   /**
@@ -129,7 +174,6 @@ export class LedgerManager {
    * the fundamental accounting equation. The entries MUST balance.
    */
   async createBalancedEntry(pair: LedgerPair): Promise<{ debit: Ledger; credit: Ledger }> {
-    // Validate the pair balances
     if (Math.abs(pair.debit.amount - pair.credit.amount) > 0.001) {
       throw new Error(
         `Ledger imbalance: debit amount (${pair.debit.amount}) does not equal credit amount (${pair.credit.amount}). ` +
@@ -145,25 +189,25 @@ export class LedgerManager {
       throw new Error('Debit and credit accounts must be different for a two-way entry');
     }
 
-    // Create both entries
-    const [debitEntry, creditEntry] = await Promise.all([
-      this.session.Ledger.create({
-        account_id: pair.debit.accountId,
-        amount: pair.debit.amount,
-        entry_type: 'debit',
-        description: pair.debit.description,
-        reference: pair.debit.reference || '',
-        ...(pair.debit.metadata ? { metadata: pair.debit.metadata } : {}),
-      }),
-      this.session.Ledger.create({
-        account_id: pair.credit.accountId,
-        amount: pair.credit.amount,
-        entry_type: 'credit',
-        description: pair.credit.description,
-        reference: pair.credit.reference || '',
-        ...(pair.credit.metadata ? { metadata: pair.credit.metadata } : {}),
-      }),
-    ]);
+    const debitEntry = this.createLocalEntry({
+      account_id: pair.debit.accountId,
+      amount: pair.debit.amount,
+      entry_type: 'debit',
+      description: pair.debit.description,
+      reference: pair.debit.reference || '',
+      ...(pair.debit.transactionId ? { transaction_id: pair.debit.transactionId } : {}),
+      ...(pair.debit.metadata ? { metadata: pair.debit.metadata } : {}),
+    });
+
+    const creditEntry = this.createLocalEntry({
+      account_id: pair.credit.accountId,
+      amount: pair.credit.amount,
+      entry_type: 'credit',
+      description: pair.credit.description,
+      reference: pair.credit.reference || '',
+      ...(pair.credit.transactionId ? { transaction_id: pair.credit.transactionId } : {}),
+      ...(pair.credit.metadata ? { metadata: pair.credit.metadata } : {}),
+    });
 
     return { debit: debitEntry, credit: creditEntry };
   }
@@ -191,20 +235,17 @@ export class LedgerManager {
       );
     }
 
-    const results = await Promise.all(
-      entries.map(entry =>
-        this.session.Ledger.create({
-          account_id: entry.accountId,
-          amount: entry.amount,
-          entry_type: entry.entryType,
-          description: entry.description,
-          reference: entry.reference || '',
-          ...(entry.metadata ? { metadata: entry.metadata } : {}),
-        })
-      )
+    return entries.map(entry =>
+      this.createLocalEntry({
+        account_id: entry.accountId,
+        amount: entry.amount,
+        entry_type: entry.entryType,
+        description: entry.description,
+        reference: entry.reference || '',
+        ...(entry.transactionId ? { transaction_id: entry.transactionId } : {}),
+        ...(entry.metadata ? { metadata: entry.metadata } : {}),
+      })
     );
-
-    return results;
   }
 
   /**
@@ -212,14 +253,12 @@ export class LedgerManager {
    * Computes net balance from all debit and credit entries.
    */
   async getAccountBalance(accountId: string): Promise<AccountBalance> {
-    const entries = await this.session.Ledger
-      .filterBy({ account_id: accountId })
-      .all();
+    const accountEntries = this.queryEntries({ account_id: accountId });
 
     let totalDebits = 0;
     let totalCredits = 0;
 
-    for (const entry of entries) {
+    for (const entry of accountEntries) {
       if (entry.entryType === 'debit') {
         totalDebits += entry.amount;
       } else if (entry.entryType === 'credit') {
@@ -232,29 +271,27 @@ export class LedgerManager {
       totalDebits,
       totalCredits,
       netBalance: totalDebits - totalCredits,
-      entryCount: entries.length,
+      entryCount: accountEntries.length,
     };
   }
 
   /**
-   * Get ledger entries for a specific transaction.
+   * Get ledger entries linked to a specific Payload transaction.
    */
   async getTransactionEntries(transactionId: string): Promise<Ledger[]> {
-    return this.session.Ledger
-      .filterBy({ transaction_id: transactionId })
-      .all();
+    return this.queryEntries({ transaction_id: transactionId });
   }
 
   /**
    * Validate that a transaction's ledger entries are balanced.
    */
   async validateTransactionBalance(transactionId: string): Promise<boolean> {
-    const entries = await this.getTransactionEntries(transactionId);
+    const txEntries = await this.getTransactionEntries(transactionId);
 
     let totalDebits = 0;
     let totalCredits = 0;
 
-    for (const entry of entries) {
+    for (const entry of txEntries) {
       if (entry.entryType === 'debit') {
         totalDebits += entry.amount;
       } else if (entry.entryType === 'credit') {
@@ -281,19 +318,12 @@ export class LedgerManager {
     for (const balance of accountBalances) {
       totalDebits += balance.totalDebits;
       totalCredits += balance.totalCredits;
-
-      // Check for unexpected imbalances in individual accounts
-      if (balance.entryCount > 0 && Math.abs(balance.netBalance) > 0.001) {
-        // Note: Individual account imbalance is normal in double-entry
-        // Only flag if the overall system is imbalanced
-      }
     }
 
     const difference = Math.abs(totalDebits - totalCredits);
     const balanced = difference < 0.001;
 
     if (!balanced) {
-      // Find which accounts contribute to the imbalance
       for (const balance of accountBalances) {
         if (balance.entryCount > 0) {
           imbalancedAccounts.push(balance.accountId);
@@ -322,7 +352,6 @@ export class LedgerManager {
     reason: string,
     metadata?: Record<string, unknown>
   ): Promise<{ debit: Ledger; credit: Ledger }> {
-    // Reverse: the original debit account gets a credit, and vice versa
     return this.createBalancedEntry({
       debit: {
         accountId: originalCreditAccountId,
@@ -358,23 +387,14 @@ export class LedgerManager {
     totalCredits: number;
     netChange: number;
   }> {
-    const filters: (Filter | Record<string, unknown>)[] = [{ account_id: accountId }];
-
-    if (startDate) {
-      filters.push((attr as Record<string, AttrChainLike>).created_at.gte(startDate));
-    }
-    if (endDate) {
-      filters.push((attr as Record<string, AttrChainLike>).created_at.lte(endDate));
-    }
-
-    const entries = await this.session.Ledger.filterBy(...filters).all();
+    const accountEntries = this.queryAccountEntries(accountId, startDate, endDate);
 
     const debits: Array<{ amount: number; description: string; createdAt: string; reference?: string; metadata?: Record<string, unknown> | null }> = [];
     const credits: Array<{ amount: number; description: string; createdAt: string; reference?: string; metadata?: Record<string, unknown> | null }> = [];
     let totalDebits = 0;
     let totalCredits = 0;
 
-    for (const entry of entries) {
+    for (const entry of accountEntries) {
       const item = {
         amount: entry.amount,
         description: entry.description,
@@ -411,19 +431,10 @@ export class LedgerManager {
     startDate: string,
     endDate: string
   ): Promise<DailyBalance[]> {
-    const filters: (Filter | Record<string, unknown>)[] = [{ account_id: accountId }];
-    if (startDate) {
-      filters.push((attr as Record<string, AttrChainLike>).created_at.gte(startDate));
-    }
-    if (endDate) {
-      filters.push((attr as Record<string, AttrChainLike>).created_at.lte(endDate));
-    }
+    const accountEntries = this.queryAccountEntries(accountId, startDate, endDate);
 
-    const entries = await this.session.Ledger.filterBy(...filters).all();
-
-    // Group entries by date (YYYY-MM-DD)
     const dayMap = new Map<string, { debits: number; credits: number; count: number }>();
-    for (const entry of entries) {
+    for (const entry of accountEntries) {
       const day = (entry.createdAt || '').slice(0, 10);
       if (!day) continue;
       const bucket = dayMap.get(day) || { debits: 0, credits: 0, count: 0 };
@@ -436,7 +447,6 @@ export class LedgerManager {
       dayMap.set(day, bucket);
     }
 
-    // Sort by date and compute running balance
     const sortedDays = Array.from(dayMap.entries()).sort((a, b) => a[0].localeCompare(b[0]));
     let runningBalance = 0;
     return sortedDays.map(([date, bucket]) => {
@@ -462,19 +472,10 @@ export class LedgerManager {
     startDate: string,
     endDate: string
   ): Promise<MonthlyBalance[]> {
-    const filters: (Filter | Record<string, unknown>)[] = [{ account_id: accountId }];
-    if (startDate) {
-      filters.push((attr as Record<string, AttrChainLike>).created_at.gte(startDate));
-    }
-    if (endDate) {
-      filters.push((attr as Record<string, AttrChainLike>).created_at.lte(endDate));
-    }
+    const accountEntries = this.queryAccountEntries(accountId, startDate, endDate);
 
-    const entries = await this.session.Ledger.filterBy(...filters).all();
-
-    // Group by month (YYYY-MM)
     const monthMap = new Map<string, { debits: number; credits: number; count: number }>();
-    for (const entry of entries) {
+    for (const entry of accountEntries) {
       const month = (entry.createdAt || '').slice(0, 7);
       if (!month) continue;
       const bucket = monthMap.get(month) || { debits: 0, credits: 0, count: 0 };
@@ -505,7 +506,7 @@ export class LedgerManager {
 
   /**
    * Generate a full account statement with running balance per entry.
-   * Similar to a bank statement — shows every entry chronologically
+   * Similar to a bank statement -- shows every entry chronologically
    * with an opening and closing balance.
    */
   async getAccountStatement(
@@ -513,16 +514,12 @@ export class LedgerManager {
     startDate: string,
     endDate: string
   ): Promise<AccountStatement> {
-    // Get all entries for this account (before the range to compute opening balance)
-    const allEntries = await this.session.Ledger
-      .filterBy({ account_id: accountId })
-      .all();
+    const allAccountEntries = this.queryEntries({ account_id: accountId });
 
-    // Split into entries before the range and entries in the range
     let openingBalance = 0;
     const rangeEntries: Ledger[] = [];
 
-    for (const entry of allEntries) {
+    for (const entry of allAccountEntries) {
       const date = entry.createdAt || '';
       if (date < startDate) {
         openingBalance += entry.entryType === 'debit' ? entry.amount : -entry.amount;
@@ -531,14 +528,13 @@ export class LedgerManager {
       }
     }
 
-    // Sort range entries chronologically
     rangeEntries.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
 
     let runningBalance = openingBalance;
     let totalDebits = 0;
     let totalCredits = 0;
 
-    const entries = rangeEntries.map(entry => {
+    const statementEntries = rangeEntries.map(entry => {
       const amount = entry.amount;
       if (entry.entryType === 'debit') {
         runningBalance += amount;
@@ -565,7 +561,7 @@ export class LedgerManager {
       endDate,
       openingBalance,
       closingBalance: runningBalance,
-      entries,
+      entries: statementEntries,
       totalDebits,
       totalCredits,
     };
@@ -582,16 +578,14 @@ export class LedgerManager {
     let totalCredits = 0;
 
     for (const accountId of accountIds) {
-      const filters: (Filter | Record<string, unknown>)[] = [{ account_id: accountId }];
-      if (asOfDate) {
-        filters.push((attr as Record<string, AttrChainLike>).created_at.lte(asOfDate));
-      }
+      const accountEntries = asOfDate
+        ? this.queryAccountEntries(accountId, undefined, asOfDate)
+        : this.queryEntries({ account_id: accountId });
 
-      const entries = await this.session.Ledger.filterBy(...filters).all();
       let debits = 0;
       let credits = 0;
 
-      for (const entry of entries) {
+      for (const entry of accountEntries) {
         if (entry.entryType === 'debit') {
           debits += entry.amount;
         } else {
@@ -630,17 +624,9 @@ export class LedgerManager {
     endDate?: string,
     format: 'json' | 'csv' = 'json'
   ): Promise<{ format: string; data: string; count: number }> {
-    const filters: (Filter | Record<string, unknown>)[] = [{ account_id: accountId }];
-    if (startDate) {
-      filters.push((attr as Record<string, AttrChainLike>).created_at.gte(startDate));
-    }
-    if (endDate) {
-      filters.push((attr as Record<string, AttrChainLike>).created_at.lte(endDate));
-    }
+    const accountEntries = this.queryAccountEntries(accountId, startDate, endDate);
 
-    const entries = await this.session.Ledger.filterBy(...filters).all();
-
-    const records = entries.map(entry => ({
+    const records = accountEntries.map(entry => ({
       id: entry.id,
       account_id: entry.accountId,
       entry_type: entry.entryType,
@@ -671,10 +657,57 @@ export class LedgerManager {
 
     return { format: 'json', data: JSON.stringify(records, null, 2), count: records.length };
   }
-}
 
-// Type helper for dynamic attr access
-interface AttrChainLike {
-  gte(value: unknown): Filter;
-  lte(value: unknown): Filter;
+  /**
+   * Get all entries stored in the ledger.
+   * Useful for debugging and full export.
+   */
+  getAllEntries(): Ledger[] {
+    return [...this.entries];
+  }
+
+  /**
+   * Get all unique account IDs in the ledger.
+   */
+  getAccountIds(): string[] {
+    const ids = new Set<string>();
+    for (const entry of this.entries) {
+      ids.add(entry.accountId);
+    }
+    return Array.from(ids);
+  }
+
+  /**
+   * Clear all ledger entries.
+   * Useful for testing or resetting the local ledger.
+   */
+  clear(): void {
+    this.entries.length = 0;
+    this.idCounter = 0;
+  }
+
+  /**
+   * Import entries from a JSON string (previously exported).
+   * Returns the number of entries imported.
+   */
+  importEntries(jsonData: string): number {
+    const records = JSON.parse(jsonData) as Array<Record<string, unknown>>;
+    for (const record of records) {
+      this.createLocalEntry(record);
+    }
+    return records.length;
+  }
+
+  /**
+   * Link a ledger entry pair to a real Payload transaction ID.
+   * Creates balanced entries that reference the Payload transaction.
+   */
+  async createTransactionEntry(
+    transactionId: string,
+    pair: LedgerPair
+  ): Promise<{ debit: Ledger; credit: Ledger }> {
+    pair.debit.transactionId = transactionId;
+    pair.credit.transactionId = transactionId;
+    return this.createBalancedEntry(pair);
+  }
 }
