@@ -15,16 +15,16 @@ beforeEach(() => clearObjectCache());
 
 describe('Spec01 - Core Objects', () => {
   describe('Customer', () => {
-    it('should have correct spec', () => {
-      expect(Customer.getMergedSpec().object).toBe('customer');
-      expect(Customer.getEndpoint()).toBe('/customers');
+    it('should have correct spec (V2: polymorphic Account)', () => {
+      expect(Customer.getMergedSpec().object).toBe('account');
+      expect(Customer.getEndpoint()).toBe('/accounts');
+      expect(Customer.getMergedSpec().polymorphic).toEqual({ type: 'customer' });
     });
 
     it('should expose typed properties', () => {
-      const c = new Customer({ name: 'Jane', email: 'jane@test.com', phone: '555-1234' });
+      const c = new Customer({ name: 'Jane', type: 'customer', contact_details: { email: 'jane@test.com' } });
       expect(c.name).toBe('Jane');
-      expect(c.email).toBe('jane@test.com');
-      expect(c.phone).toBe('555-1234');
+      expect(c.type).toBe('customer');
     });
   });
 
@@ -48,13 +48,13 @@ describe('Spec01 - Core Objects', () => {
       const spec = Refund.getMergedSpec();
       expect(spec.polymorphic).toEqual({ type: 'refund' });
 
-      const refund = new Refund({ amount: 50, linked_transaction_id: 'txn_1' });
+      const refund = new Refund({ amount: 50, type: 'refund' });
       expect(refund.type).toBe('refund');
-      expect(refund.linkedTransactionId).toBe('txn_1');
+      expect(refund.amount).toBe(50);
     });
 
-    it('Credit should be polymorphic with type=credit', () => {
-      expect(Credit.getMergedSpec().polymorphic).toEqual({ type: 'credit' });
+    it('Credit should be polymorphic with type=deposit (V2 deprecation)', () => {
+      expect(Credit.getMergedSpec().polymorphic).toEqual({ type: 'deposit' });
     });
 
     it('Deposit should be polymorphic with type=deposit', () => {

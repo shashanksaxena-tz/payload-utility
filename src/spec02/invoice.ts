@@ -95,6 +95,16 @@ export class Invoice extends Model {
     return this.update({ status: 'paid' } as ModelData);
   }
 
+  /** Send this invoice */
+  async send(): Promise<this> {
+    return this.update({ status: 'sent' } as ModelData);
+  }
+
+  /** Void this invoice */
+  async void(): Promise<this> {
+    return this.update({ status: 'voided' } as ModelData);
+  }
+
   /** Close this invoice */
   async close(): Promise<this> {
     return this.update({ status: 'closed' } as ModelData);

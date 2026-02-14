@@ -8,6 +8,11 @@
 import { Request, RequestOptions } from './request';
 import { Model, ModelOperations, ModelData } from './model';
 import { validateApiKey } from './utils';
+import { MiddlewareChain, RequestContext, ResponseContext } from './middleware';
+import { PayloadEventEmitter } from './events';
+import { RetryExecutor, RetryStrategy, CircuitBreaker, RateLimiter } from './retry';
+import { MetadataManager, AppMetadata } from './metadata';
+import { StorageAdapter } from '../storage/types';
 
 // --- Spec01 Imports ---
 import { Customer } from '../spec01/customer';
@@ -47,6 +52,16 @@ export interface SessionConfig {
   apiUrl?: string;
   apiVersion?: string;
   timeout?: number;
+  middleware?: MiddlewareChain;
+  events?: PayloadEventEmitter;
+  retry?: Partial<RetryStrategy>;
+  circuitBreaker?: { failureThreshold?: number; resetTimeout?: number };
+  rateLimiter?: { maxTokens?: number; refillRate?: number };
+  metadata?: Partial<AppMetadata>;
+  storage?: StorageAdapter;
+  onRequest?: (ctx: RequestContext) => void;
+  onResponse?: (ctx: ResponseContext) => void;
+  onError?: (err: Error) => void;
 }
 
 const DEFAULT_API_URL = 'https://api.payload.com';
@@ -56,6 +71,10 @@ export class Session {
   private readonly request: Request;
   private readonly apiKey: string;
   private readonly config: SessionConfig;
+  private readonly _middleware: MiddlewareChain;
+  private readonly _events: PayloadEventEmitter;
+  private readonly _metadataManager: MetadataManager | null;
+  private readonly _storage: StorageAdapter | null;
 
   // --- Spec01 Operations ---
   public readonly Customer: ModelOperations<Customer>;
@@ -108,11 +127,59 @@ export class Session {
     this.apiKey = apiKey;
     this.config = config;
 
+    // Initialize middleware chain (use provided or create new)
+    this._middleware = config.middleware || new MiddlewareChain();
+
+    // Register shorthand hooks as middleware if provided
+    if (config.onRequest || config.onResponse || config.onError) {
+      this._middleware.use({
+        name: 'session-hooks',
+        before: config.onRequest
+          ? (ctx) => { config.onRequest!(ctx); return ctx; }
+          : undefined,
+        after: config.onResponse
+          ? (res, _req) => { config.onResponse!(res); return res; }
+          : undefined,
+        onError: config.onError
+          ? (err, _req) => { config.onError!(err); }
+          : undefined,
+      });
+    }
+
+    // Initialize event emitter (use provided or create new)
+    this._events = config.events || new PayloadEventEmitter();
+
+    // Initialize retry executor if configured
+    const retryExecutor = config.retry ? new RetryExecutor(config.retry) : undefined;
+
+    // Initialize circuit breaker if configured
+    const circuitBreaker = config.circuitBreaker
+      ? new CircuitBreaker(config.circuitBreaker)
+      : undefined;
+
+    // Initialize rate limiter if configured
+    const rateLimiter = config.rateLimiter
+      ? new RateLimiter(config.rateLimiter)
+      : undefined;
+
+    // Initialize metadata manager if configured
+    this._metadataManager = config.metadata
+      ? new MetadataManager(config.metadata)
+      : null;
+
+    // Store storage adapter reference
+    this._storage = config.storage || null;
+
     const requestOptions: RequestOptions = {
       apiUrl: config.apiUrl || DEFAULT_API_URL,
       apiKey: this.apiKey,
       apiVersion: config.apiVersion || 'v2.0',
       timeout: config.timeout || DEFAULT_TIMEOUT,
+      middleware: this._middleware,
+      events: this._events,
+      retry: retryExecutor,
+      circuitBreaker,
+      rateLimiter,
     };
 
     this.request = new Request(requestOptions);
@@ -176,5 +243,25 @@ export class Session {
       return this.apiKey.substring(0, 15) + '...' + this.apiKey.substring(this.apiKey.length - 4);
     }
     return '***';
+  }
+
+  /** Get the middleware chain for adding/inspecting middleware */
+  getMiddleware(): MiddlewareChain {
+    return this._middleware;
+  }
+
+  /** Get the event emitter for subscribing to SDK events */
+  getEvents(): PayloadEventEmitter {
+    return this._events;
+  }
+
+  /** Get the metadata manager, or null if not configured */
+  getMetadataManager(): MetadataManager | null {
+    return this._metadataManager;
+  }
+
+  /** Get the storage adapter, or null if not configured */
+  getStorage(): StorageAdapter | null {
+    return this._storage;
   }
 }

@@ -316,6 +316,12 @@ beforeAll(async () => {
       res.json(result);
     } catch (e: any) { res.status(500).json({ error: e.message }); }
   });
+  app.post('/api/ledger/reset', (_req: any, res: any) => {
+    try {
+      sdk.ledger.clear();
+      res.json({ ok: true });
+    } catch (e: any) { res.status(500).json({ error: e.message }); }
+  });
 
   // Dashboard stats
   app.get('/api/dashboard/stats', async (_req: any, res: any) => {
@@ -346,12 +352,14 @@ afterAll(async () => {
   if (mockServer) await new Promise<void>(resolve => mockServer.server.close(() => resolve()));
 });
 
-beforeEach(() => {
+beforeEach(async () => {
   // Clear SDK object cache between tests
   const { clearObjectCache } = require('../../dist');
   clearObjectCache();
   // Reset mock server data
   mockServer.reset();
+  // Reset LedgerManager local storage
+  await POST('/api/ledger/reset');
 });
 
 /* ================================================================== */
@@ -382,7 +390,7 @@ describe('Dashboard API Integration Tests', () => {
         name: 'Alice Smith', email: 'alice@test.com', phone: '555-1234',
       });
       expect(status).toBe(201);
-      expect(data.id).toMatch(/^cust_/);
+      expect(data.id).toMatch(/^acco_/);
       expect(data.name).toBe('Alice Smith');
       expect(data.email).toBe('alice@test.com');
       expect(data.created_at).toBeTruthy();
@@ -449,7 +457,7 @@ describe('Dashboard API Integration Tests', () => {
     test('POST /api/credits creates a credit', async () => {
       const { status, data } = await POST('/api/credits', { amount: 25 });
       expect(status).toBe(201);
-      expect(data.type).toBe('credit');
+      expect(data.type).toBe('deposit'); // V2: credit maps to type=deposit
     });
 
     test('POST /api/deposits creates a deposit', async () => {
@@ -469,7 +477,9 @@ describe('Dashboard API Integration Tests', () => {
       const payment = await POST('/api/payments', { amount: 75 });
       const { status, data } = await POST(`/api/payments/${payment.data.id}/void`);
       expect(status).toBe(200);
-      expect(data.status).toBe('voided');
+      // V2: status is an object { value: 'voided' }
+      const statusVal = typeof data.status === 'object' ? data.status.value : data.status;
+      expect(statusVal).toBe('voided');
     });
   });
 
@@ -620,11 +630,11 @@ describe('Dashboard API Integration Tests', () => {
     test('POST /api/stakeholders creates a stakeholder', async () => {
       const ent = await POST('/api/entities', { legal_name: 'TestCo' });
       const { status, data } = await POST('/api/stakeholders', {
-        entity_id: ent.data.id, first_name: 'John', last_name: 'Doe', title: 'CEO', ownership_percentage: 100,
+        legal_entity_id: ent.data.id, first_name: 'John', last_name: 'Doe', title: 'CEO', ownership: 100,
       });
       expect(status).toBe(201);
       expect(data.first_name).toBe('John');
-      expect(data.entity_id).toBe(ent.data.id);
+      expect(data.legal_entity_id).toBe(ent.data.id);
     });
 
     test('POST /api/processing-accounts creates a processing account', async () => {
@@ -864,9 +874,11 @@ describe('Dashboard API Integration Tests', () => {
         debit:  { accountId: 'acct_1', amount: 50, entryType: 'debit', description: 'Test' },
         credit: { accountId: 'acct_2', amount: 50, entryType: 'credit', description: 'Test' },
       });
-      const { status, data } = await GET('/api/ledger-entries');
+      // LedgerManager stores entries locally, verify via balance endpoint
+      const { status, data } = await GET('/api/ledger/balance/acct_1');
       expect(status).toBe(200);
-      expect(data.length).toBe(2); // one debit + one credit
+      expect(data.totalDebits).toBe(50);
+      expect(data.entryCount).toBe(1);
     });
 
     test('balanced entry with metadata stores and returns metadata', async () => {
@@ -1377,8 +1389,8 @@ describe('Dashboard API Integration Tests', () => {
       expect(entity.status).toBe(201);
 
       const stakeholder = await POST('/api/stakeholders', {
-        entity_id: entity.data.id, first_name: 'Jane', last_name: 'CEO',
-        title: 'CEO', ownership_percentage: 100,
+        legal_entity_id: entity.data.id, first_name: 'Jane', last_name: 'CEO',
+        title: 'CEO', ownership: 100,
       });
       expect(stakeholder.status).toBe(201);
 

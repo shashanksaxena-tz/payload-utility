@@ -107,3 +107,28 @@ export {
   TrialBalanceRow,
   TrialBalance,
 } from './ledger/ledger-manager';
+
+// --- Middleware & Hooks ---
+export { MiddlewareChain, Middleware, BeforeRequestHook, AfterResponseHook, ErrorHook, RequestContext, ResponseContext } from './core/middleware';
+
+// --- Events ---
+export { PayloadEventEmitter, SDKEvent, EventData } from './core/events';
+
+// --- Retry & Resilience ---
+export { RetryExecutor, RetryStrategy, CircuitBreaker, RateLimiter, DEFAULT_RETRY_STRATEGY } from './core/retry';
+
+// --- Webhook Verification ---
+export { WebhookVerifier, WebhookEvent, WebhookVerificationError } from './core/webhook-verify';
+
+// --- Metadata Tracking ---
+export { MetadataManager, AppMetadata, withMetadata } from './core/metadata';
+
+// --- Storage Adapters ---
+export { StorageAdapter, StoredLedgerEntry, LedgerQuery } from './storage/types';
+export { MemoryAdapter } from './storage/memory-adapter';
+export { JsonFileAdapter } from './storage/json-file-adapter';
+// Note: SQLiteAdapter requires optional `better-sqlite3` dependency
+// Users should import directly: import { SQLiteAdapter } from 'payload-utility/dist/storage/sqlite-adapter';
+
+// --- Tenant Reports ---
+export { TenantReportGenerator } from './ledger/tenant-reports';

@@ -26,7 +26,9 @@ const REQUIRED_FIELDS: Record<string, string[]> = {
   webhook: ['url'],
   entity: ['legal_name'],
   stakeholder: ['entity_id', 'first_name', 'last_name'],
+  legal_entity_owner: ['legal_entity_id', 'first_name', 'last_name'],
   transfer: ['amount', 'source_account_id', 'destination_account_id'],
+  operation: [],
   intent: ['amount'],
 };
 
@@ -215,13 +217,16 @@ const ENDPOINT_MAP: Record<string, string> = {
   '/webhook_logs': 'webhook_log',
   '/entities': 'entity',
   '/stakeholders': 'stakeholder',
+  '/legal_entity_owners': 'legal_entity_owner',
   '/transfers': 'transfer',
   '/processing_accounts': 'processing_account',
   '/processing_agreements': 'processing_agreement',
+  '/operations': 'operation',
   '/payment_links': 'payment_link',
   '/intents': 'intent',
   '/transaction_ledgers': 'transaction_ledger',
   '/profiles': 'profile',
+  '/orgs': 'org',
   '/accounts/orgs': 'org',
 };
 

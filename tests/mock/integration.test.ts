@@ -45,7 +45,7 @@ describe('Integration: Spec01 - Core Objects', () => {
 
       expect(customer.id).toBeTruthy();
       expect(customer.name).toBe('Jane Doe');
-      expect(customer.email).toBe('jane@example.com');
+      expect(customer.getStr('email')).toBe('jane@example.com');
     });
 
     it('should get a customer by ID', async () => {
@@ -138,8 +138,8 @@ describe('Integration: Spec02 - Advanced Objects', () => {
       });
 
       expect(schedule.id).toBeTruthy();
-      expect(schedule.amount).toBe(29.99);
-      expect(schedule.frequency).toBe('monthly');
+      expect(schedule.getNum('amount')).toBe(29.99);
+      expect(schedule.getStr('frequency')).toBe('monthly');
     });
   });
 
@@ -155,7 +155,7 @@ describe('Integration: Spec02 - Advanced Objects', () => {
       });
 
       expect(invoice.id).toBeTruthy();
-      expect(invoice.totalAmount).toBe(500.00);
+      expect(invoice.getNum('total_amount')).toBe(500.00);
       expect(invoice.status).toBe('draft');
     });
   });
@@ -211,29 +211,29 @@ describe('Integration: Spec02 - Advanced Objects', () => {
       const entity = await session.Entity.create({
         legal_name: 'Acme Corp LLC',
         dba_name: 'Acme',
-        entity_type: 'llc',
+        type: 'llc',
         ein: '12-3456789',
       });
 
       expect(entity.id).toBeTruthy();
       expect(entity.legalName).toBe('Acme Corp LLC');
-      expect(entity.entityType).toBe('llc');
+      expect(entity.type).toBe('llc');
     });
   });
 
   describe('Stakeholder', () => {
     it('should create a stakeholder', async () => {
       const sh = await session.Stakeholder.create({
-        entity_id: 'ent_1',
+        legal_entity_id: 'ent_1',
         first_name: 'John',
         last_name: 'Doe',
-        ownership_percentage: 75,
+        ownership: 75,
         title: 'CEO',
       });
 
       expect(sh.id).toBeTruthy();
       expect(sh.firstName).toBe('John');
-      expect(sh.ownershipPercentage).toBe(75);
+      expect(sh.ownership).toBe(75);
     });
   });
 
@@ -274,7 +274,7 @@ describe('Integration: Spec02 - Advanced Objects', () => {
       });
 
       expect(intent.id).toBeTruthy();
-      expect(intent.amount).toBe(200);
+      expect(intent.getNum('amount')).toBe(200);
     });
   });
 

@@ -1,4 +1,5 @@
 import { Model, ModelSpec, ModelData } from '../core/model';
+import { AppMetadata, MetadataManager, withMetadata } from '../core/metadata';
 
 /**
  * V2 Transaction status object shape.
@@ -113,6 +114,47 @@ export class Transaction extends Model {
   get attrs(): Record<string, unknown> | null {
     const raw = this.get('attrs');
     return (raw && typeof raw === 'object') ? raw as Record<string, unknown> : null;
+  }
+
+  // --- App Metadata tracking ---
+
+  /** Extract AppMetadata from the transaction's attrs field. */
+  get appMetadata(): AppMetadata | null {
+    const raw = this.attrs;
+    if (!raw) return null;
+    const manager = new MetadataManager();
+    const metadata = manager.fromPayloadAttrs(raw);
+    // Return null if no metadata keys were found
+    if (Object.keys(metadata).length === 0) return null;
+    return metadata;
+  }
+
+  /** Get the correlation ID from attrs, or empty string. */
+  get correlationId(): string {
+    return this.attrs?.['app_metadata.correlation_id'] as string ?? '';
+  }
+
+  /** Get the app ID from attrs, or empty string. */
+  get appId(): string {
+    return this.attrs?.['app_metadata.app_id'] as string ?? '';
+  }
+
+  /** Get the tenant ID from attrs, or empty string. */
+  get tenantId(): string {
+    return this.attrs?.['app_metadata.tenant_id'] as string ?? '';
+  }
+
+  /** Get the order ID from attrs, or empty string. */
+  get orderId(): string {
+    return this.attrs?.['app_metadata.order_id'] as string ?? '';
+  }
+
+  /** Merge AppMetadata into a create/update data payload's attrs field. */
+  static withTracking(
+    data: Record<string, unknown>,
+    metadata: AppMetadata
+  ): Record<string, unknown> {
+    return withMetadata(data, metadata);
   }
 
   /** Void this transaction (V2: update status to voided) */

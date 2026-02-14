@@ -10,11 +10,11 @@ beforeEach(() => {
 
 describe('Model', () => {
   describe('spec merging', () => {
-    it('should return base spec for non-polymorphic models', () => {
+    it('should return spec for Customer (polymorphic Account)', () => {
       const spec = Customer.getMergedSpec();
-      expect(spec.object).toBe('customer');
-      expect(spec.endpoint).toBe('/customers');
-      expect(spec.polymorphic).toBeUndefined();
+      expect(spec.object).toBe('account');
+      expect(spec.endpoint).toBe('/accounts');
+      expect(spec.polymorphic).toEqual({ type: 'customer' });
     });
 
     it('should merge polymorphic spec with parent', () => {
@@ -41,7 +41,7 @@ describe('Model', () => {
 
   describe('getEndpoint', () => {
     it('should return explicit endpoint', () => {
-      expect(Customer.getEndpoint()).toBe('/customers');
+      expect(Customer.getEndpoint()).toBe('/accounts');
     });
 
     it('should auto-generate endpoint from object name', () => {
@@ -57,12 +57,11 @@ describe('Model', () => {
       const customer = new Customer({
         id: 'cust_1',
         name: 'Jane Doe',
-        email: 'jane@example.com',
+        contact_details: { email: 'jane@example.com' },
       });
 
       expect(customer.id).toBe('cust_1');
       expect(customer.name).toBe('Jane Doe');
-      expect(customer.email).toBe('jane@example.com');
     });
 
     it('should apply polymorphic defaults', () => {

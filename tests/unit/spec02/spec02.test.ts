@@ -161,24 +161,22 @@ describe('Spec02 - Advanced Objects', () => {
 
   describe('Entity (LegalEntity)', () => {
     it('should have correct spec', () => {
-      expect(Entity.getMergedSpec().object).toBe('legal_entity');
-      expect(Entity.getEndpoint()).toBe('/legal_entities');
+      expect(Entity.getMergedSpec().object).toBe('entity');
+      expect(Entity.getEndpoint()).toBe('/entities');
     });
 
     it('should expose properties', () => {
       const entity = new Entity({
         legal_name: 'Acme Corp',
-        type: 'llc',
-        ein: '123456789',
-        city: 'San Francisco',
-        state_province: 'CA',
+        type: 'business',
         phone_number: '555-1234',
+        country: 'US',
+        tax_id: { value: '123456789' },
       });
       expect(entity.legalName).toBe('Acme Corp');
-      expect(entity.type).toBe('llc');
-      expect(entity.ein).toBe('123456789');
-      expect(entity.city).toBe('San Francisco');
+      expect(entity.type).toBe('business');
       expect(entity.phoneNumber).toBe('555-1234');
+      expect(entity.country).toBe('US');
     });
   });
 

@@ -8,6 +8,9 @@
 import { PayloadError } from './exceptions';
 import { Filter, serializeFilters } from './attr';
 import { nestedQStringKeys, buildUrl, generateRequestId, sanitizeId } from './utils';
+import { MiddlewareChain, RequestContext, ResponseContext } from './middleware';
+import { PayloadEventEmitter } from './events';
+import { RetryExecutor, CircuitBreaker, RateLimiter } from './retry';
 import http from 'http';
 import https from 'https';
 import { URL } from 'url';
@@ -17,6 +20,11 @@ export interface RequestOptions {
   apiKey: string;
   apiVersion?: string;
   timeout?: number;
+  middleware?: MiddlewareChain;
+  events?: PayloadEventEmitter;
+  retry?: RetryExecutor;
+  circuitBreaker?: CircuitBreaker;
+  rateLimiter?: RateLimiter;
 }
 
 export interface RequestConfig {
@@ -162,35 +170,126 @@ export class Request {
     const url = this.buildRequestUrl(config);
     const headers = this.buildHeaders(requestId, config.method);
 
-    let bodyStr: string | undefined;
-    if (config.body && (config.method === 'POST' || config.method === 'PUT')) {
-      bodyStr = JSON.stringify(config.body);
-    }
-
-    const response = await makeRequest(
-      url,
-      config.method,
-      headers,
-      bodyStr,
-      this.options.timeout
-    );
-
-    let parsedBody: Record<string, unknown>;
-    try {
-      parsedBody = response.body ? JSON.parse(response.body) : {};
-    } catch {
-      parsedBody = { raw: response.body };
-    }
-
-    if (response.statusCode >= 400) {
-      throw PayloadError.fromResponse(response.statusCode, parsedBody);
-    }
-
-    return {
-      statusCode: response.statusCode,
-      data: parsedBody as T,
-      requestId,
+    // Build initial request context for middleware/events
+    let reqCtx: RequestContext = {
+      method: config.method,
+      path: url,
+      headers: { ...headers },
+      body: config.body,
     };
+
+    // Run before-request middleware
+    if (this.options.middleware && this.options.middleware.size > 0) {
+      reqCtx = await this.options.middleware.runBefore(reqCtx);
+    }
+
+    // Emit request.before event
+    if (this.options.events) {
+      this.options.events.emit('request.before', {
+        method: reqCtx.method,
+        path: reqCtx.path,
+        requestId,
+      });
+    }
+
+    // The core HTTP call wrapped for retry/circuit-breaker/rate-limiter
+    const doRequest = async (): Promise<ApiResponse<T>> => {
+      // Rate limiter: wait for a token before sending
+      if (this.options.rateLimiter) {
+        await this.options.rateLimiter.acquire();
+      }
+
+      let bodyStr: string | undefined;
+      if (reqCtx.body && (reqCtx.method === 'POST' || reqCtx.method === 'PUT')) {
+        bodyStr = JSON.stringify(reqCtx.body);
+      }
+
+      const response = await makeRequest(
+        reqCtx.path,
+        reqCtx.method,
+        reqCtx.headers,
+        bodyStr,
+        this.options.timeout
+      );
+
+      let parsedBody: Record<string, unknown>;
+      try {
+        parsedBody = response.body ? JSON.parse(response.body) : {};
+      } catch {
+        parsedBody = { raw: response.body };
+      }
+
+      if (response.statusCode >= 400) {
+        throw PayloadError.fromResponse(response.statusCode, parsedBody);
+      }
+
+      return {
+        statusCode: response.statusCode,
+        data: parsedBody as T,
+        requestId,
+      };
+    };
+
+    try {
+      // Wrap with circuit breaker and retry as configured
+      let result: ApiResponse<T>;
+
+      const withCircuitBreaker = this.options.circuitBreaker
+        ? () => this.options.circuitBreaker!.execute(doRequest)
+        : doRequest;
+
+      if (this.options.retry) {
+        result = await this.options.retry.execute(withCircuitBreaker);
+      } else {
+        result = await withCircuitBreaker();
+      }
+
+      // Build response context for after-response middleware
+      let resCtx: ResponseContext = {
+        statusCode: result.statusCode,
+        data: result.data as Record<string, unknown>,
+        headers: {},
+      };
+
+      // Run after-response middleware
+      if (this.options.middleware && this.options.middleware.size > 0) {
+        resCtx = await this.options.middleware.runAfter(resCtx, reqCtx);
+      }
+
+      // Emit request.after event
+      if (this.options.events) {
+        this.options.events.emit('request.after', {
+          method: reqCtx.method,
+          path: reqCtx.path,
+          statusCode: resCtx.statusCode,
+          requestId,
+        });
+      }
+
+      return {
+        statusCode: resCtx.statusCode,
+        data: resCtx.data as T,
+        requestId: result.requestId,
+      };
+    } catch (error) {
+      // Emit request.error event
+      if (this.options.events) {
+        this.options.events.emit('request.error', {
+          method: reqCtx.method,
+          path: reqCtx.path,
+          error: error instanceof Error ? error.message : String(error),
+          requestId,
+        });
+      }
+
+      // Run error middleware
+      if (this.options.middleware && this.options.middleware.size > 0 && error instanceof Error) {
+        await this.options.middleware.runError(error, reqCtx);
+        // runError always re-throws, so we won't reach here
+      }
+
+      throw error;
+    }
   }
 
   /** Convenience: GET request */

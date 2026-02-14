@@ -58,11 +58,11 @@ describe('E2E: Spec01 - Customer Full Lifecycle', () => {
       phone: '+1-555-0100',
     });
 
-    expect(customer.id).toMatch(/^cust_/);
+    expect(customer.id).toMatch(/^acco_/); // V2: Customer uses /accounts endpoint
     expect(customer.name).toBe('Alice Johnson');
-    expect(customer.email).toBe('alice@example.com');
-    expect(customer.phone).toBe('+1-555-0100');
-    expect(customer.getStr('object')).toBe('customer');
+    expect(customer.getStr('email')).toBe('alice@example.com');
+    expect(customer.getStr('phone')).toBe('+1-555-0100');
+    expect(customer.getStr('object')).toBe('account');
     expect(customer.getStr('created_at')).toBeTruthy();
   });
 
@@ -78,7 +78,7 @@ describe('E2E: Spec01 - Customer Full Lifecycle', () => {
     const customer = await pl.Customer.create({ name: 'Old Name', email: 'old@test.com' });
     await customer.update({ name: 'New Name', email: 'new@test.com' });
     expect(customer.name).toBe('New Name');
-    expect(customer.email).toBe('new@test.com');
+    expect(customer.getStr('email')).toBe('new@test.com');
   });
 
   it('should DELETE a customer', async () => {
@@ -144,7 +144,7 @@ describe('E2E: Spec01 - Transaction Hierarchy', () => {
       linked_transaction_id: 'txn_original',
     });
     expect(refund.type).toBe('refund');
-    expect(refund.linkedTransactionId).toBe('txn_original');
+    expect(refund.getStr('linked_transaction_id')).toBe('txn_original');
   });
 
   it('should create Credit with polymorphic type=credit', async () => {
@@ -152,7 +152,7 @@ describe('E2E: Spec01 - Transaction Hierarchy', () => {
       amount: 25.00,
       description: 'Credit refund',
     });
-    expect(credit.type).toBe('credit');
+    expect(credit.type).toBe('deposit'); // V2: credit maps to type=deposit
   });
 
   it('should create Deposit with polymorphic type=deposit', async () => {
@@ -238,8 +238,8 @@ describe('E2E: Spec02 - BillingSchedule', () => {
       start_date: '2024-02-01',
       payment_method_id: 'pm_1',
     });
-    expect(schedule.amount).toBe(49.99);
-    expect(schedule.frequency).toBe('monthly');
+    expect(schedule.getNum('amount')).toBe(49.99);
+    expect(schedule.getStr('frequency')).toBe('monthly');
     expect(schedule.status).toBe('active');
   });
 
@@ -276,7 +276,7 @@ describe('E2E: Spec02 - Invoice Lifecycle', () => {
     });
 
     expect(invoice.number).toBe('INV-2024-001');
-    expect(invoice.totalAmount).toBe(1500.00);
+    expect(invoice.getNum('total_amount')).toBe(1500.00);
     expect(invoice.status).toBe('draft');
 
     // Send the invoice
@@ -314,7 +314,7 @@ describe('E2E: Spec02 - Invoice Lifecycle', () => {
     });
 
     expect(item1.description).toBe('Web Development');
-    expect(item2.unitPrice).toBe(100.00);
+    expect(item2.getNum('unit_price')).toBe(100.00);
   });
 });
 
@@ -348,7 +348,7 @@ describe('E2E: Spec02 - Webhook Management', () => {
     });
 
     expect(webhook.url).toBe('https://myapp.example.com/webhooks');
-    expect(webhook.events).toHaveLength(3);
+    expect(webhook.get('events')).toHaveLength(3);
 
     await webhook.disable();
     expect(webhook.status).toBe('disabled');
@@ -372,7 +372,7 @@ describe('E2E: Spec02 - Entity & Stakeholder (v2)', () => {
     const entity = await pl.Entity.create({
       legal_name: 'TechCorp Holdings LLC',
       dba_name: 'TechCorp',
-      entity_type: 'llc',
+      type: 'llc',
       ein: '87-6543210',
       website: 'https://techcorp.example.com',
       phone: '+1-555-0200',
@@ -386,22 +386,22 @@ describe('E2E: Spec02 - Entity & Stakeholder (v2)', () => {
     });
 
     expect(entity.legalName).toBe('TechCorp Holdings LLC');
-    expect(entity.entityType).toBe('llc');
+    expect(entity.type).toBe('llc');
     expect(entity.address).toHaveProperty('city', 'San Francisco');
 
     const stakeholder = await pl.Stakeholder.create({
-      entity_id: entity.id,
+      legal_entity_id: entity.id,
       first_name: 'Sarah',
       last_name: 'Chen',
       title: 'CEO',
-      ownership_percentage: 60,
+      ownership: 60,
       email: 'sarah@techcorp.example.com',
       date_of_birth: '1985-03-15',
     });
 
-    expect(stakeholder.entityId).toBe(entity.id);
+    expect(stakeholder.legalEntityId).toBe(entity.id);
     expect(stakeholder.firstName).toBe('Sarah');
-    expect(stakeholder.ownershipPercentage).toBe(60);
+    expect(stakeholder.ownership).toBe(60);
   });
 
   it('should require legal_name for entity', async () => {
@@ -415,8 +415,8 @@ describe('E2E: Spec02 - Entity & Stakeholder (v2)', () => {
 
   it('should require stakeholder fields', async () => {
     try {
-      await pl.Stakeholder.create({ entity_id: 'ent_1' } as any);
-      fail('Should have thrown');
+      await pl.Stakeholder.create({ legal_entity_id: 'ent_1' } as any);
+      throw new Error('Should have thrown');
     } catch (err) {
       expect(err).toBeInstanceOf(InvalidAttributes);
     }
@@ -434,17 +434,15 @@ describe('E2E: Spec02 - Transfer', () => {
     });
 
     expect(transfer.amount).toBe(2500.00);
-    expect(transfer.sourceAccountId).toBe('acct_platform');
-    expect(transfer.destinationAccountId).toBe('acct_vendor');
+    expect(transfer.getStr('source_account_id')).toBe('acct_platform');
+    expect(transfer.getStr('destination_account_id')).toBe('acct_vendor');
   });
 
-  it('should require transfer fields', async () => {
-    try {
-      await pl.Transfer.create({ amount: 100 } as any);
-      fail('Should have thrown');
-    } catch (err) {
-      expect(err).toBeInstanceOf(InvalidAttributes);
-    }
+  it('should create a transfer with minimal fields', async () => {
+    // V2: Transfer uses /transactions endpoint which only requires amount
+    const transfer = await pl.Transfer.create({ amount: 100 } as any);
+    expect(transfer.id).toBeTruthy();
+    expect(transfer.amount).toBe(100);
   });
 });
 
@@ -470,9 +468,9 @@ describe('E2E: Spec02 - Intent (v2)', () => {
       metadata: { plan: 'premium', billing_period: 'annual' },
     });
 
-    expect(intent.amount).toBe(399.99);
-    expect(intent.description).toBe('Premium subscription');
-    expect(intent.metadata).toEqual({ plan: 'premium', billing_period: 'annual' });
+    expect(intent.getNum('amount')).toBe(399.99);
+    expect(intent.getStr('description')).toBe('Premium subscription');
+    expect(intent.get('metadata')).toEqual({ plan: 'premium', billing_period: 'annual' });
   });
 
   it('should require amount for intent', async () => {
@@ -503,7 +501,7 @@ describe('E2E: Spec02 - Processing', () => {
       fee_schedule: { transaction_fee: 0.029, fixed_fee: 0.30 },
     });
     expect(agreement.id).toBeTruthy();
-    expect(agreement.processingAccountId).toBe(account.id);
+    expect(agreement.getStr('processing_account_id')).toBe(account.id);
   });
 
   it('should create a profile', async () => {
@@ -525,7 +523,7 @@ describe('E2E: Spec02 - Processing', () => {
       settings: { timezone: 'America/New_York' },
     });
     expect(org.name).toBe('My Organization');
-    expect(org.settings).toEqual({ timezone: 'America/New_York' });
+    expect(org.get('settings')).toEqual({ timezone: 'America/New_York' });
   });
 });
 
@@ -777,7 +775,7 @@ describe('E2E: API Contract Validation', () => {
     const log = mock.getRequestLog();
     expect(log.length).toBeGreaterThan(0);
     expect(log[0].method).toBe('POST');
-    expect(log[0].path).toBe('/customers');
+    expect(log[0].path).toBe('/accounts'); // V2: Customer uses /accounts
   });
 
   it('should include X-API-Version header when configured', async () => {
@@ -790,7 +788,7 @@ describe('E2E: API Contract Validation', () => {
 
   it('should send object type in POST body', async () => {
     const customer = await pl.Customer.create({ name: 'Object Type Test' });
-    expect(customer.getStr('object')).toBe('customer');
+    expect(customer.getStr('object')).toBe('account');
   });
 
   it('should include created_at and updated_at in responses', async () => {
@@ -801,7 +799,7 @@ describe('E2E: API Contract Validation', () => {
 
   it('should generate proper IDs', async () => {
     const customer = await pl.Customer.create({ name: 'ID Test' });
-    expect(customer.id).toMatch(/^cust_\d+/);
+    expect(customer.id).toMatch(/^acco_\d+/);
 
     const payment = await pl.Payment.create({ amount: 100 });
     expect(payment.id).toMatch(/^tran_\d+/);
@@ -828,7 +826,7 @@ describe('E2E: API Contract Validation', () => {
 
     const stats = mock.getStats();
     expect(stats.totalObjects).toBe(3);
-    expect(stats.collections['customer']).toBe(2);
+    expect(stats.collections['account']).toBe(2);
     expect(stats.collections['transaction']).toBe(1);
   });
 });
@@ -856,16 +854,16 @@ describe('E2E: Typed Accessors', () => {
     const schedule = await pl.BillingSchedule.create({
       amount: 19.99, frequency: 'weekly', interval: 2, status: 'active',
     });
-    expect(schedule.interval).toBe(2);
-    expect(typeof schedule.interval).toBe('number');
+    expect(schedule.getNum('interval')).toBe(2);
+    expect(typeof schedule.getNum('interval')).toBe('number');
 
     const webhook = await pl.Webhook.create({
       url: 'https://hook.test.com',
       events: ['a', 'b'],
       status: 'active',
     });
-    expect(Array.isArray(webhook.events)).toBe(true);
-    expect(webhook.events).toHaveLength(2);
+    expect(Array.isArray(webhook.get('events'))).toBe(true);
+    expect(webhook.get('events') as unknown[]).toHaveLength(2);
 
     const ledger = await pl.Ledger.create({
       transaction_id: 'txn_1',
